@@ -27,6 +27,40 @@ window.CU = window.CU || {};
     return p.v > current ? 0 : p.v;                // a higher value means the week reset since: start from 0
   }
 
+  /* ---- working-time pace -------------------------------------------------------------------------------
+     A working day is the window [start, start + hours]. `start` is the first moment of that day when usage rose
+     (first reading showing consumption), or 08:00 when there is none. The weekly pace is the share of the week's
+     working hours that has already elapsed, instead of plain calendar time. */
+  const DEFAULT_START_H = 8;
+  function dayStarts(history) {
+    const out = {}, prev = {};
+    let last = null;
+    for (const r of history || []) {
+      const t = Date.parse(r.t);
+      if (isNaN(t)) continue;
+      const d = new Date(t), key = d.getFullYear() * 400 + d.getMonth() * 32 + d.getDate();
+      const rose = last && ((r.h5 != null && last.h5 != null && r.h5 > last.h5) || (r.d7 != null && last.d7 != null && r.d7 > last.d7));
+      if (rose && out[key] == null) { const m0 = new Date(t); m0.setHours(0, 0, 0, 0); out[key] = t - m0.getTime(); }
+      last = r;
+    }
+    return out;
+  }
+  function workPace(history, hours, weekStart, weekEnd, now) {
+    const starts = dayStarts(history);
+    const day = new Date(weekStart); day.setHours(0, 0, 0, 0);
+    let total = 0, elapsed = 0, startToday = null;
+    for (; day.getTime() < weekEnd; day.setDate(day.getDate() + 1)) {
+      const key = day.getFullYear() * 400 + day.getMonth() * 32 + day.getDate();
+      const auto = starts[key] != null, off = hours >= 24 ? 0 : (auto ? starts[key] : DEFAULT_START_H * H);
+      const a = day.getTime() + off, b = a + hours * H;
+      const lo = Math.max(a, weekStart), hi = Math.min(b, weekEnd);
+      if (hi > lo) { total += hi - lo; elapsed += Math.max(0, Math.min(hi, now) - lo); }
+      const today = new Date(now); today.setHours(0, 0, 0, 0);
+      if (day.getTime() === today.getTime()) startToday = { ms: a, auto: auto && hours < 24 };
+    }
+    return { pace: total > 0 ? clamp(elapsed / total * 100) : null, elapsedH: elapsed / H, totalH: total / H, startToday };
+  }
+
   CU.compute = function (D, now = Date.now(), opts = {}) {
     if (!D || !D.seven_day) return null;
     const ratio = D.ratio_estimate || D.ratio_default;   // % of the week one full 5-hour window costs
@@ -37,6 +71,9 @@ window.CU = window.CU || {};
     // not over every hour of the week. 24 = no assumption (the old behaviour).
     const hours = clamp(opts.hoursPerDay || 24, 1, 24);
     seven.sessionsLeft = seven.remaining / ratio;
+    const wp = seven.active ? workPace(D.history, hours, seven.reset.getTime() - SEVEN_D, seven.reset.getTime(), now) : null;
+    if (wp) seven.pace = wp.pace;                     // working-time pace replaces the calendar-time one
+    seven.work = wp;
 
     // Daily budget (like a data-plan app): what was left of the week when today began, split over the days
     // until the reset. Staying below `limit` = still inside today's budget.

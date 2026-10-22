@@ -33,7 +33,7 @@ Au premier lancement, on choisit la langue (English / Français), puis un menu �
 
 ### Le widget
 
-Jauges de la fenêtre 5 heures et de la semaine, bascule compact/détaillé, répartition par produit repliée, et un **curseur d'heures par jour** sur le côté (1–24 h, grands traits toutes les 5 h) : indique combien d'heures par jour tu utilises vraiment Claude, et le rythme horaire conseillé ainsi que la limite 5 h sont recalculés sur ces heures plutôt que sur les nuits aussi.
+Jauges de la fenêtre 5 heures et de la semaine, bascule compact/détaillé, répartition par produit repliée, et un **curseur d'heures par jour** sur le côté (1–24 h, grands traits toutes les 5 h) : indique combien d'heures par jour tu utilises vraiment Claude, et le rythme semaine compte ces heures de travail (à partir de ta première requête du jour, 08:00 par défaut) ; le rythme horaire conseillé est calculé dessus. Un encart replié liste toutes les équations (voir plus bas).
 
 ### Raccourcis en ligne de commande
 
@@ -57,6 +57,30 @@ python run.py --lang fr <command>       force la langue
 - Le widget fonctionne aussi ouvert comme simple fichier (`web/index.html`), mais ne peut alors pas se rafraîchir seul.
 
 Le ratio semaine / 5 heures affiché dans le widget est estimé à partir de tes relevés consécutifs (10 % tant qu'il n'y a pas assez de données).
+
+## Comment les chiffres sont calculés
+
+Le widget contient un encart replié **Comment c'est calculé** qui montre chaque équation avec tes valeurs actuelles. Même contenu ici. Notation : *u5* / *u7* = % utilisé dans la fenêtre 5 heures / la semaine (donnés par Claude), *h* = le curseur d'heures par jour.
+
+| Quoi | Équation |
+|---|---|
+| Rythme 5 h (repère bleu) | `(5 h − temps restant) / 5 h × 100` – vrai temps écoulé |
+| Début de ta journée de travail | premier relevé du jour où la consommation a augmenté (ta première requête), sinon 08:00 |
+| Rythme semaine (repère orange, anneau semaine) | `heures de travail écoulées cette semaine / heures de travail de la semaine × 100` – un jour = *h* heures à partir de l'heure de début ; à 24 h c'est le temps calendaire |
+| Coût d'une fenêtre 5 h, *r* | % de la semaine consommé par 100 % d'une fenêtre 5 h, estimé sur tes relevés consécutifs (10 % par défaut) |
+| Semaine utilisée en début de journée, *u0* | % hebdo au dernier relevé avant minuit local (le plus ancien s'il n'y en a pas ; 0 si la semaine a été remise à zéro) |
+| Jours jusqu'au reset, *D* | `(reset hebdo − aujourd'hui 00:00) / 24 h` |
+| **Budget du jour** *B* (« dépense possible / jour ») | `(100 − u0) / D` |
+| Limite hebdo à cet instant, *L7* (frontière vert/rouge de l'anneau semaine) | `u0 + B` |
+| Reste du budget du jour | `max(0, L7 − u7)` |
+| Limite 5 h, *L5* (repère orange et frontière vert/rouge de l'anneau 5 h) | `u5 + (L7 − u7) × 100 / r`, plafonnée à 100 |
+| **Conseillé par heure** (% 5 h /h) | `B / h × 100 / r` |
+| Maximum possible jusqu'au reset | `(100 − u5) / heures restantes de la fenêtre` |
+| Fenêtres 5 h pleines restantes | `(100 − u7) / r` |
+| Répartition par produit | `part du produit × u7 / 100` points du quota hebdo |
+| Pastille « en avance / marge » | `utilisé − rythme` ; au-delà de ±5 points : en avance / marge |
+
+**Ce que change le curseur :** le rythme semaine (heures de travail au lieu du temps calendaire) et le rythme horaire conseillé. Le rythme 5 h est du vrai temps, et les zones vert/rouge viennent du budget du jour, qui ne dépend pas du curseur.
 
 ## Structure du projet
 

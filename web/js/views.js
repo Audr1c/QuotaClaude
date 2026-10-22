@@ -127,6 +127,7 @@ window.CU = window.CU || {};
   };
 
   /* ---------------- "how it is computed" panel: every equation, with your current numbers ---------------- */
+  const hhmm = ms => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
   CU.formulas = function (m, open) {
     const { five, seven } = m, H = 3600e3, dash = "—";
     const hl5 = five.left / H, dl7 = seven.left / (24 * H);
@@ -134,7 +135,8 @@ window.CU = window.CU || {};
     const rows = [
       ["used", "", "", `${p1(five.used)} / ${p1(seven.used)}`],
       ["pace5", "", `(5 h − ${n2(hl5)} h) / 5 h`, p1(five.pace)],
-      ["pace7", "", `(7 d − ${n2(dl7)} d) / 7 d`, p1(seven.pace)],
+      ["start", "", "", seven.work && seven.work.startToday ? hhmm(seven.work.startToday.ms) + " " + (seven.work.startToday.auto ? t("f.start.auto") : t("f.start.def")) : dash],
+      ["pace7", "slider", seven.work ? `${n2(seven.work.elapsedH)} h / ${n2(seven.work.totalH)} h` : "", p1(seven.pace)],
       ["ratio", "", m.ratioEstimated ? t("f.ratio.est") : t("f.ratio.def"), p1(m.ratio)],
       ["u0", "", "", p1(seven.startUsed)],
       ["days", "", "", n2(seven.daysLeft) + " d"],

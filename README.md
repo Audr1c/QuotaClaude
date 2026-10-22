@@ -33,7 +33,7 @@ The first launch asks for a language (English / Français), then shows an arrow-
 
 ### The widget
 
-Gauges for the 5-hour window and the week, a compact/detailed switch, a collapsed per-product breakdown, and an **hours-per-day slider** on the side (1–24 h, long marks every 5 h): tell it how many hours a day you really use Claude and the advised hourly pace and the 5-hour limit are recomputed over those hours instead of over the nights too.
+Gauges for the 5-hour window and the week, a compact/detailed switch, a collapsed per-product breakdown, and an **hours-per-day slider** on the side (1–24 h, long marks every 5 h): tell it how many hours a day you really use Claude and the weekly pace counts those working hours (from your first request of the day, 08:00 by default) and the advised hourly pace is computed over them. A collapsed panel lists every equation (see below).
 
 ### Command-line shortcuts
 
@@ -57,6 +57,30 @@ python run.py --lang fr <command>       force the language
 - The widget also works opened as a plain file (`web/index.html`) but then cannot refresh by itself.
 
 The weekly-vs-5-hour ratio shown in the widget is estimated from your own consecutive readings (10 % until enough data exists).
+
+## How the numbers are computed
+
+The widget has a collapsed **How it is computed** panel that shows each equation with your current values. Same content here. Notation: *u5* / *u7* = % used in the 5-hour window / the week (as reported), *h* = the hours-per-day slider.
+
+| What | Equation |
+|---|---|
+| 5-hour pace (blue marker) | `(5 h − time left) / 5 h × 100` – real elapsed time |
+| Start of your work day | first reading of the day where usage rose (your first request), else 08:00 |
+| Weekly pace (orange marker, week ring) | `working hours elapsed this week / working hours in the week × 100` – a day is *h* hours from the start time; at 24 h it is plain calendar time |
+| Cost of a 5-hour window, *r* | % of the week consumed per 100 % of a 5-hour window, estimated from your consecutive readings (default 10 %) |
+| Week used at start of today, *u0* | weekly % at the last reading before local midnight (oldest reading if none; 0 if the week reset since) |
+| Days until reset, *D* | `(weekly reset − today 00:00) / 24 h` |
+| **Daily budget** *B* ("possible spend / day") | `(100 − u0) / D` |
+| Weekly limit now, *L7* (green/red boundary of the week ring) | `u0 + B` |
+| Left in today's budget | `max(0, L7 − u7)` |
+| 5-hour limit, *L5* (orange marker and green/red boundary of the 5-hour ring) | `u5 + (L7 − u7) × 100 / r`, capped at 100 |
+| **Advised per hour** (5-hour %/h) | `B / h × 100 / r` |
+| Max possible until reset | `(100 − u5) / hours left in the window` |
+| Full 5-hour windows left | `(100 − u7) / r` |
+| Per-product breakdown | `product share × u7 / 100` points of the weekly quota |
+| "Ahead / margin" pill | `used − pace`; beyond ±5 points it reads ahead / margin |
+
+**What the slider changes:** the weekly pace (working hours instead of calendar time) and the advised hourly pace. The 5-hour pace is real time, and the green/red zones come from the daily budget, which does not depend on the slider.
 
 ## Project layout
 
