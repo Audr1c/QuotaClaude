@@ -47,10 +47,26 @@
     });
   }
 
-  /* error shown to the user: translated when the code is known, raw English message otherwise */
-  function errorText(code, raw) {
+  /* error banner: one clear line + an expandable diagnostic panel (what the API said, when, streak, hint, history) */
+  const esc = x => String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const when = iso => { const d = new Date(iso); return isNaN(d) ? esc(iso) : d.toLocaleString(CU.lang === "fr" ? "fr-FR" : "en-GB"); };
+
+  function errorHtml(code, raw, diag) {
     const msg = code && CU.hasText("error." + code) ? CU.t("error." + code) : raw;
-    return CU.t("error.prefix", { msg });
+    const last = (diag && diag.last) || {};
+    const row = (k, v) => v ? `<dt>${CU.t(k)}</dt><dd>${v}</dd>` : "";
+    const hint = CU.hasText("diag.hint." + code) ? CU.t("diag.hint." + code) : CU.t("diag.hint.generic");
+    const recent = ((diag && diag.recent) || []).map(e =>
+      `<li><b>${when(e.t)}</b> ${esc(e.status ? "HTTP " + e.status : e.code)} <span>${esc(e.api_message || e.message)}</span></li>`).join("");
+    const api = last.api_message || last.body || raw;
+    const detail = `<dl>${row("diag.what", esc(api))}${row("diag.status", esc(last.status))}${row("diag.when", last.t ? when(last.t) : "")}`
+      + `${row("diag.streak", diag && diag.consecutive ? diag.consecutive : "")}${row("diag.retry", esc(last.retry_after))}`
+      + `${row("diag.request", esc(last.request_id))}${row("diag.endpoint", esc(last.url))}</dl>`
+      + `<p class="hint">${hint}</p>`
+      + (recent ? `<h4>${CU.t("diag.recent")}</h4><ul>${recent}</ul>` : "")
+      + `<p class="logs">${CU.t("diag.logs")}</p>`;
+    const open = document.querySelector("#err details[open]") ? " open" : "";
+    return `<div class="err-line">${esc(CU.t("error.prefix", { msg }))}</div><details${open}><summary>${CU.t("diag.summary")}</summary>${detail}</details>`;
   }
 
   /* ---------- rendering ---------- */
@@ -60,7 +76,7 @@
     if (!m) {
       $("app").innerHTML = `<div class="card empty">${CU.t("empty")}</div>`;
       err.hidden = !(D && D.error);
-      if (D && D.error) err.textContent = errorText(D.error_code, D.error);
+      if (D && D.error) err.innerHTML = errorHtml(D.error_code, D.error, D.diagnostics);
       $("foot").textContent = "";
       $("meta").textContent = "—";
       return;
@@ -70,7 +86,7 @@
     $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) : "—";
     $("meta").classList.toggle("stale", m.age > 30 * 60e3);
     err.hidden = !m.error;
-    if (m.error) err.textContent = errorText(m.errorCode, m.error);
+    if (m.error) err.innerHTML = errorHtml(m.errorCode, m.error, m.diagnostics);
 
     const source = m.ratioEstimated ? CU.t("foot.estimated", { pts: m.ratioPoints }) : CU.t("foot.default");
     $("foot").innerHTML = CU.t("foot.ratio", { ratio: CU.fmt.pct(m.ratio, 1), source }) + "<br>" + CU.t("foot.limit");

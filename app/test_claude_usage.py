@@ -112,6 +112,38 @@ class OfflineTests(unittest.TestCase):
             self.assertEqual(cu.read_token(), "abc")
 
 
+class DiagnosticTests(unittest.TestCase):
+    def _http_error(self, code, body, headers=None):
+        import io, urllib.error, email.message
+        h = email.message.Message()
+        for k, v in (headers or {}).items():
+            h[k] = v
+        return urllib.error.HTTPError(cu.API_URL, code, "Too Many Requests", h, io.BytesIO(body.encode()))
+
+    def test_429_is_recorded_with_details_and_streak(self):
+        body = '{"error":{"type":"rate_limit_error","message":"Rate limited. Please try again later."}}'
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.object(cu, "read_token", return_value="x"), \
+             mock.patch("urllib.request.urlopen", side_effect=lambda *a, **k: (_ for _ in ()).throw(
+                 self._http_error(429, body, {"Retry-After": "60", "request-id": "req_1"}))):
+            _, err, state = cu.run(Path(d))
+            _, err, state = cu.run(Path(d))
+            self.assertEqual(state["error_code"], "rate_limited")
+            diag = state["diagnostics"]
+            self.assertEqual(diag["consecutive"], 2)
+            self.assertEqual(diag["last"]["status"], 429)
+            self.assertEqual(diag["last"]["retry_after"], "60")
+            self.assertEqual(diag["last"]["api_type"], "rate_limit_error")
+            self.assertEqual(len(diag["recent"]), 2)
+            self.assertIn("429", (Path(d) / "tracker.log").read_text())
+
+    def test_success_resets_streak(self):
+        with tempfile.TemporaryDirectory() as d:
+            dd = Path(d)
+            cu.record_diagnostic(dd, cu.now_utc(), cu.TrackerError("http", "boom", {"status": 500}))
+            self.assertEqual(cu.record_diagnostic(dd, cu.now_utc(), None)["consecutive"], 0)
+
+
 class ServerTests(unittest.TestCase):
     """The widget server answers, serves files, and refuses other hosts and origins."""
 

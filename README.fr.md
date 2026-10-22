@@ -94,7 +94,8 @@ Tout reste dans le dossier `app/data/` à côté du code (ignoré par git, cré�
 | `usage.csv` | une ligne par relevé : heure, % 5 heures, % semaine, heures de reset |
 | `latest.json` / `latest.js` | dernier état + historique récent, lus par le widget |
 | `last_response.json` | réponse brute de l'API au dernier relevé (débogage) |
-| `tracker.log` | journal des relevés en arrière-plan |
+| `tracker.log` | journal des relevés en arrière-plan (statut, Retry-After, échecs d'affilée) |
+| `errors.json` | les 30 derniers relevés en échec, avec tous les détails ; le bandeau rouge du widget les ouvre (**Détails**) |
 | `config.json` | ta langue du menu |
 | `server.log` | sortie du serveur du widget (Linux) |
 

@@ -105,6 +105,7 @@ window.CU = window.CU || {};
       age: fetched ? now - fetched : Infinity,
       error: D.error,
       errorCode: D.error_code,
+      diagnostics: D.diagnostics || null,
       history: D.history || [],
       // per-product breakdown: share of what was used, and the equivalent in points of the weekly quota
       breakdown: D.breakdown && D.breakdown.rows

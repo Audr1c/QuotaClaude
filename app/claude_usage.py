@@ -57,9 +57,10 @@ class TrackerError(Exception):
     `code` is a stable identifier the UIs translate (the message itself is English).
     """
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, detail: dict | None = None):
         super().__init__(message)
         self.code = code
+        self.detail = detail or {}      # raw facts for the diagnostic panel (status, headers, body...)
 
 
 # --------------------------------------------------------------------------- dates
@@ -137,18 +138,31 @@ def fetch_usage(token: str) -> dict:
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")[:300]
+        body = e.read().decode("utf-8", "replace")[:600]
+        detail = {"url": API_URL, "status": e.code, "reason": str(e.reason or ""),
+                  "retry_after": e.headers.get("Retry-After") if e.headers else None,
+                  "request_id": (e.headers.get("request-id") or e.headers.get("x-request-id")) if e.headers else None,
+                  "body": body}
+        try:
+            err = json.loads(body).get("error") or {}
+            detail["api_type"], detail["api_message"] = err.get("type"), err.get("message")
+        except (ValueError, AttributeError):
+            pass
         if e.code in (401, 403):
             raise TrackerError(
                 "auth",
                 f"Access refused ({e.code}): the token has probably expired. "
-                f"Open Claude Code once, it refreshes it by itself. Detail: {body}",
+                f"Open Claude Code once, it refreshes it by itself. Detail: {body[:300]}", detail,
             )
-        raise TrackerError("http", f"HTTP error {e.code}: {body}")
+        if e.code == 429:
+            raise TrackerError("rate_limited", f"HTTP 429 - rate limited: {detail.get('api_message') or body[:200]}", detail)
+        raise TrackerError("http", f"HTTP error {e.code}: {body[:300]}", detail)
     except urllib.error.URLError as e:
-        raise TrackerError("network", f"Network unavailable: {e.reason}")
+        raise TrackerError("network", f"Network unavailable: {e.reason}", {"url": API_URL, "reason": str(e.reason)})
+    except TimeoutError as e:
+        raise TrackerError("network", f"Network timeout: {e}", {"url": API_URL, "reason": "timeout"})
     except ValueError as e:
-        raise TrackerError("bad_json", f"Response is not JSON: {e}")
+        raise TrackerError("bad_json", f"Response is not JSON: {e}", {"url": API_URL})
 
 
 def window(payload: dict, key: str) -> tuple[float | None, datetime | None]:
@@ -254,8 +268,40 @@ def previous_breakdown(data_dir: Path) -> dict | None:
         return None
 
 
+MAX_ERRORS_KEPT = 30
+
+
+def record_diagnostic(data_dir: Path, now: datetime, err: "TrackerError | None") -> dict:
+    """Keep a short history of failures in errors.json; return what the widget shows.
+
+    consecutive = failures in a row since the last successful reading (0 when it worked).
+    """
+    p = data_dir / "errors.json"
+    try:
+        hist = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(hist, dict):
+            raise ValueError
+    except (OSError, ValueError):
+        hist = {}
+    events = hist.get("events") if isinstance(hist.get("events"), list) else []
+    consecutive = int(hist.get("consecutive") or 0)
+    if err is None:
+        consecutive = 0
+    else:
+        consecutive += 1
+        events.append({"t": iso(now), "code": err.code, "message": str(err), **err.detail})
+        events = events[-MAX_ERRORS_KEPT:]
+    try:
+        _atomic_write(p, json.dumps({"consecutive": consecutive, "events": events}, ensure_ascii=False, indent=1))
+    except OSError:
+        pass
+    return {"consecutive": consecutive, "last": events[-1] if (err and events) else None,
+            "recent": events[-8:][::-1], "kept": len(events)}
+
+
 def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | None,
-                  breakdown: dict | None = None, error_code: str | None = None) -> dict:
+                  breakdown: dict | None = None, error_code: str | None = None,
+                  diagnostics: dict | None = None) -> dict:
     last = rows[-1] if rows else None
     ratio, ratio_points = estimate_ratio(rows)
     cutoff = now - timedelta(days=HISTORY_DAYS)
@@ -278,6 +324,7 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
         "breakdown": breakdown,
         "error": error,
         "error_code": error_code,
+        "diagnostics": diagnostics,
     }
     text = json.dumps(state, ensure_ascii=False, indent=1)
     _atomic_write(data_dir / "latest.json", text)
@@ -305,7 +352,7 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
     """
     now = now or now_utc()
     data_dir.mkdir(parents=True, exist_ok=True)
-    row, error, error_code, breakdown = None, None, None, None
+    row, error, error_code, breakdown, failure = None, None, None, None, None
     try:
         if payload is None:
             payload = fetch_usage(read_token())
@@ -314,12 +361,15 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
         append_csv(data_dir / "usage.csv", row)
         breakdown = extract_breakdown(payload)
     except TrackerError as e:
-        error, error_code = str(e), e.code
+        error, error_code, failure = str(e), e.code, e
+    diagnostics = record_diagnostic(data_dir, now, failure)
     if breakdown is None:
         breakdown = previous_breakdown(data_dir)
-    state = write_outputs(data_dir, load_history(data_dir / "usage.csv"), now, error, breakdown, error_code)
+    state = write_outputs(data_dir, load_history(data_dir / "usage.csv"), now, error, breakdown, error_code, diagnostics)
     if error:
-        log(data_dir, "ERROR " + error)
+        d = failure.detail
+        extra = "".join(f" {k}={d[k]}" for k in ("status", "retry_after", "request_id") if d.get(k))
+        log(data_dir, f"ERROR [{error_code}]{extra} (failure #{diagnostics['consecutive']} in a row) " + error)
     else:
         log(data_dir, f"OK 5h={row['five_hour_pct']}% 7d={row['seven_day_pct']}%")
     return row, error, state

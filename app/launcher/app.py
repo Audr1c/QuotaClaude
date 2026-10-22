@@ -332,6 +332,8 @@ def install_flow(ui: Ui) -> None:
         raw = tui.ask(ui.t("install.interval.ask", default=default), str(default))
         minutes = parse_minutes(raw)
         if minutes is not None:
+            if minutes < 5:
+                ui.say("install.interval.short")
             break
         ui.say("install.interval.bad")
     with_server = ask_yes_no(ui, ui.t("install.server.title"),

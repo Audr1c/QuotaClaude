@@ -94,7 +94,8 @@ Everything stays in the `app/data/` folder next to the code (git-ignored, create
 | `usage.csv` | one line per reading: time, 5-hour %, week %, reset times |
 | `latest.json` / `latest.js` | latest state + recent history, read by the widget |
 | `last_response.json` | raw API answer of the last reading (debugging) |
-| `tracker.log` | log of the background readings |
+| `tracker.log` | log of the background readings (status, Retry-After, failures in a row) |
+| `errors.json` | the last 30 failed readings with full detail; the widget's red banner opens it (**Details**) |
 | `config.json` | your menu language |
 | `server.log` | widget server output (Linux) |
 
