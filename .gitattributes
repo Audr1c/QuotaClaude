@@ -17,4 +17,4 @@ Makefile text eol=lf
 *.png  binary
 *.ico  binary
 *.exe  binary
-bin/claude-usage-tracker binary
+/claude-usage-tracker binary

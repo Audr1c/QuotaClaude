@@ -13,12 +13,12 @@ int wmain(int argc, wchar_t **argv) {
     wchar_t *slash = wcsrchr(exe, L'\\');
     if (!slash) return 1;
     *slash = 0;                                            /* exe now holds the folder */
-    /* look for run.bat next to the exe, then one folder up (when the exe lives in bin\) */
+    /* look for run.bat in the app\ folder next to the exe, then next to the exe itself */
     wchar_t bat[MAX_PATH * 2];
-    swprintf(bat, MAX_PATH * 2, L"%ls\\run.bat", exe);
-    if (GetFileAttributesW(bat) == INVALID_FILE_ATTRIBUTES) swprintf(bat, MAX_PATH * 2, L"%ls\\..\\run.bat", exe);
+    swprintf(bat, MAX_PATH * 2, L"%ls\\app\\run.bat", exe);
+    if (GetFileAttributesW(bat) == INVALID_FILE_ATTRIBUTES) swprintf(bat, MAX_PATH * 2, L"%ls\\run.bat", exe);
     if (GetFileAttributesW(bat) == INVALID_FILE_ATTRIBUTES) {
-        fprintf(stderr, "run.bat not found next to this program.\n");
+        fprintf(stderr, "run.bat not found (expected in the app folder next to this program).\n");
         system("pause");
         return 1;
     }
@@ -48,9 +48,9 @@ int main(int argc, char **argv) {
     char *slash = strrchr(exe, '/');
     if (!slash) return 1;
     *slash = 0;
-    snprintf(script, sizeof script, "%s/run.sh", exe);
-    if (access(script, R_OK) != 0) snprintf(script, sizeof script, "%s/../run.sh", exe);
-    if (access(script, R_OK) != 0) { fprintf(stderr, "run.sh not found next to this program.\n"); return 1; }
+    snprintf(script, sizeof script, "%s/app/run.sh", exe);      /* app/ folder next to this program, else next to it */
+    if (access(script, R_OK) != 0) snprintf(script, sizeof script, "%s/run.sh", exe);
+    if (access(script, R_OK) != 0) { fprintf(stderr, "run.sh not found (expected in the app folder next to this program).\n"); return 1; }
     char *args[argc + 2];
     args[0] = "sh"; args[1] = script;
     for (int i = 1; i < argc; i++) args[i + 1] = argv[i];

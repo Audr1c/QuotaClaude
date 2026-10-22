@@ -4,11 +4,11 @@
 
 Logs your Claude **5-hour** and **7-day** quota (% used + reset times) to a CSV file and shows it as gauges, with pacing indicators, in Claude's colours. Everything runs locally on your machine.
 
-![Detailed view](docs/screenshot-detail.png)
+![Detailed view](app/docs/screenshot-detail.png)
 
 | Compact | Dark |
 |---|---|
-| ![Compact view](docs/screenshot-compact.png) | ![Dark theme](docs/screenshot-detail-dark.png) |
+| ![Compact view](app/docs/screenshot-compact.png) | ![Dark theme](app/docs/screenshot-detail-dark.png) |
 
 > **Unofficial.** It uses an undocumented Anthropic endpoint (`/api/oauth/usage`) that may change or disappear without notice.
 
@@ -22,13 +22,13 @@ You do not need to build anything: the launchers are already in the repository.
 
 | OS | Start |
 |---|---|
-| Windows | double-click **`bin/claude-usage-tracker.exe`** (or `run.bat`) |
-| Linux | **`bin/claude-usage-tracker`** (or `./run.sh`; after a ZIP download run `chmod +x bin/claude-usage-tracker run.sh` once) |
-| Any | `python run.py` |
+| Windows | double-click **`claude-usage-tracker.exe`** (or `app\run.bat`) |
+| Linux | **`claude-usage-tracker`** (or `app/run.sh`; after a ZIP download run `chmod +x claude-usage-tracker app/run.sh` once) |
+| Any | `python app/run.py` |
 
-> The `.exe` / Linux program is only a launcher: it starts `run.bat` / `run.sh` from the same folder, so it does not work alone. Copy the whole folder, not just the binary.
+> The `.exe` / Linux program is only a launcher: it starts `run.bat` / `run.sh` from the `app/` folder next to it, so it does not work alone. Copy the whole folder, not just the binary.
 
-Your readings are stored in the `data/` folder next to the code (see [Where your data goes](#where-your-data-goes)).
+Your readings are stored in the `app/data/` folder next to the code (see [Where your data goes](#where-your-data-goes)).
 
 The first launch asks for a language (English / Français), then shows an arrow-key menu with a short explanation under each entry:
 
@@ -46,51 +46,66 @@ Gauges for the 5-hour window and the week, a compact/detailed switch, a collapse
 ### Command-line shortcuts
 
 ```
-python run.py read                      one reading
-python run.py start                     start the widget server (background, no browser)
-python run.py open                      start the server if needed and open the widget
-python run.py stop                      stop the server
-python run.py status
-python run.py install --minutes 10 [--with-server]
-python run.py uninstall
-python run.py tests
-python run.py --lang fr <command>       force the language
+python app/run.py read                      one reading
+python app/run.py start                     start the widget server (background, no browser)
+python app/run.py open                      start the server if needed and open the widget
+python app/run.py stop                      stop the server
+python app/run.py status
+python app/run.py install --minutes 10 [--with-server]
+python app/run.py uninstall
+python app/run.py tests
+python app/run.py --lang fr <command>       force the language
 ```
 
 ## Launchers and icon
 
-Besides `run.bat` / `run.sh`, `bin/` holds two tiny prebuilt programs that do nothing but start those scripts in a terminal (same menu, same arguments):
+Besides `app/run.bat` / `app/run.sh`, the project root holds two tiny prebuilt programs that do nothing but start those scripts in a terminal (same menu, same arguments):
 
 | OS | Program | Icon |
 |---|---|---|
-| Windows | `bin/claude-usage-tracker.exe` (double-click, or pin it to the taskbar) | embedded in the .exe |
-| Linux | `bin/claude-usage-tracker` (static binary) + a menu entry with `make desktop` | from the menu entry |
+| Windows | `claude-usage-tracker.exe` (double-click, or pin it to the taskbar) | embedded in the .exe |
+| Linux | `claude-usage-tracker` (static binary) + a menu entry with `make desktop` | from the menu entry |
 
-The widget also has a browser-tab icon (`web/favicon.svg`). Logo: two rings, orange = week, blue = 5-hour window. The terminal menu shows a pixel-art version of it.
+The widget also has a browser-tab icon (`app/web/favicon.svg`). Logo: two rings, orange = week, blue = 5-hour window. The terminal menu shows a pixel-art version of it.
 
 ### Building them yourself (make)
 
-You only need this to rebuild or change them. Requirements: Python 3 and `pip install ziglang` (the Zig compiler packaged for pip; it cross-compiles both programs from any OS, nothing else to install). Icons also need `pip install pillow`.
+You only need this to rebuild or change them. Run it from the `app/` folder (`cd app`). Requirements: Python 3 and `pip install ziglang` (the Zig compiler packaged for pip; it cross-compiles both programs from any OS, nothing else to install). Icons also need `pip install pillow`.
 
 ```
 make            only explains the targets (nothing is built)
-make all        build both programs into bin/
-make windows    bin/claude-usage-tracker.exe (with the icon, via assets/app.rc)
-make linux      bin/claude-usage-tracker
+make all        build both programs (next to the README)
+make windows    claude-usage-tracker.exe (with the icon, via assets/app.rc)
+make linux      claude-usage-tracker
 make desktop    add "Claude Usage Tracker" to the Linux applications menu
 make icons      regenerate assets/ and web/favicon.* from tools/make_icons.py
-make clean      remove bin/
+make clean      delete the two built programs
 python tools/build.py [windows|linux|icons|desktop|clean]    same thing without make (e.g. on Windows)
 ```
 
-How it works: `tools/launcher.c` finds `run.bat` (Windows) or `run.sh` (Linux) next to itself (or one folder up) and starts it. `tools/make_icons.py` draws the logo once and writes the SVG, PNG and ICO files. The prebuilt binaries are unsigned, so Windows SmartScreen may warn you the first time; rebuild them from source if you prefer.
+How it works: `app/tools/launcher.c` finds `run.bat` (Windows) or `run.sh` (Linux) in the `app/` folder next to itself and starts it. `app/tools/make_icons.py` draws the logo once and writes the SVG, PNG and ICO files. The prebuilt binaries are unsigned, so Windows SmartScreen may warn you the first time; rebuild them from source if you prefer.
+
+## Where your data goes
+
+Everything stays in the `app/data/` folder next to the code (git-ignored, created automatically by the first reading; nothing is written anywhere else):
+
+| File | What |
+|---|---|
+| `usage.csv` | one line per reading: time, 5-hour %, week %, reset times |
+| `latest.json` / `latest.js` | latest state + recent history, read by the widget |
+| `last_response.json` | raw API answer of the last reading (debugging) |
+| `tracker.log` | log of the background readings |
+| `config.json` | your menu language |
+| `server.log` | widget server output (Linux) |
+
+Outside `app/data/`: the scheduled task if you set one up (Windows Task Scheduler, or a systemd user timer / crontab line on Linux; the menu removes it), and Python's `__pycache__` folders. The Claude Code credentials file is only **read**, never copied. A reading needs Claude Code signed in; otherwise the menu tells you the credentials were not found.
 
 ## How it works
 
 - `claude_usage.py` reads your Claude Code OAuth token from `~/.claude/.credentials.json` (Windows: `%USERPROFILE%\.claude\.credentials.json`; honours `CLAUDE_CONFIG_DIR`, or set `CLAUDE_USAGE_TOKEN`), calls the usage endpoint, and appends a row to `data/usage.csv`. It also writes `data/latest.json` / `latest.js` for the widget.
 - `server.py` serves the widget on `http://127.0.0.1:8765` (local only; Host/Origin checks against DNS rebinding) and lets the **Refresh** button trigger a reading.
 - Scheduling: Windows Task Scheduler, or a systemd user timer on Linux (cron fallback).
-- The widget also works opened as a plain file (`web/index.html`) but then cannot refresh by itself.
+- The widget also works opened as a plain file (`app/web/index.html`) but then cannot refresh by itself.
 
 The weekly-vs-5-hour ratio shown in the widget is estimated from your own consecutive readings (10 % until enough data exists).
 
@@ -121,27 +136,31 @@ The widget has a collapsed **How it is computed** panel that shows each equation
 ## Project layout
 
 ```
-run.py / run.bat / run.sh   entry point (menu)
-bin/  tools/  assets/       launchers (.exe / Linux), their C source and build scripts, icons
-Makefile                    make all | windows | linux | desktop | icons
-launcher/                   menu code and translations (strings.py)
-claude_usage.py             reads the quota, writes data/
-server.py                   local widget server
-web/                        the widget (HTML, CSS, JS; EN/FR)
-windows/  linux/            scheduler install/uninstall scripts
-data/                       your readings (git-ignored, never committed)
+README.md  README.fr.md  LICENSE
+claude-usage-tracker.exe    Windows launcher (double-click)
+claude-usage-tracker        Linux launcher
+app/                        everything else
+  run.py  run.bat  run.sh   entry point (menu)
+  launcher/                 menu code and translations (strings.py)
+  claude_usage.py           reads the quota, writes data/
+  server.py                 local widget server
+  web/                      the widget (HTML, CSS, JS; EN/FR)
+  windows/  linux/          scheduler install/uninstall scripts
+  tools/  assets/  Makefile launchers' C source, build scripts, icons
+  docs/                     README screenshots
+  data/                     your readings (git-ignored, never committed)
 ```
 
 ## Privacy
 
 - No data leaves your machine except the request to Anthropic's API with your own token.
-- The token is read at run time and never copied or logged. `data/` and credentials are in `.gitignore`.
+- The token is read at run time and never copied or logged. `app/data/` and credentials are in `.gitignore`.
 - The server only listens on `127.0.0.1`.
 
 ## Notes
 
 - macOS: the scripts are plain Python/shell and may work, but the scheduler setup is untested (use cron manually).
-- Existing scheduled tasks created by earlier versions keep working.
+- If you set up automatic readings with an older layout (before the `app/` folder existed), open the menu and redo **Automatic readings** once: the old task points to the old location.
 - Not affiliated with Anthropic.
 
 ## Licence

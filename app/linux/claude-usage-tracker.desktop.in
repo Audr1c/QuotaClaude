@@ -2,7 +2,7 @@
 Type=Application
 Name=Claude Usage Tracker
 Comment=Track your Claude 5-hour and 7-day quota
-Exec=@DIR@/bin/claude-usage-tracker
+Exec=@DIR@/claude-usage-tracker
 Path=@DIR@
 Icon=@ICON@
 Terminal=true

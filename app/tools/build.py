@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BIN = ROOT / "bin"
+BIN = ROOT.parent                       # launchers go next to the README, one level above app/
+LAUNCHERS = ("claude-usage-tracker.exe", "claude-usage-tracker")
 
 
 def need(module, package, why):
@@ -28,7 +29,6 @@ def need(module, package, why):
 
 def zig(target, out, *sources):
     need("ziglang", "ziglang", "the compiler that builds the launchers for Windows and Linux")
-    BIN.mkdir(exist_ok=True)
     cmd = [sys.executable, "-m", "ziglang", "cc", "-target", target] + (["-municode"] if "windows" in target else []) \
         + ["-Os", "-s", "-o", str(BIN / out)] + [str(ROOT / s) for s in sources]
     print(" ".join(cmd))
@@ -44,7 +44,7 @@ def desktop():
     icon = icons / "claude-usage-tracker.png"
     shutil.copy(ROOT / "assets" / "icon-256.png", icon)
     text = (ROOT / "linux" / "claude-usage-tracker.desktop.in").read_text(encoding="utf-8")
-    text = text.replace("@DIR@", str(ROOT)).replace("@ICON@", str(icon))
+    text = text.replace("@DIR@", str(BIN)).replace("@ICON@", str(icon))
     (apps / "claude-usage-tracker.desktop").write_text(text, encoding="utf-8")
     print("Menu entry installed: Claude Usage Tracker")
 
@@ -54,14 +54,15 @@ HELP = """Claude Usage Tracker - build helper
 Builds the tiny launchers (they only start run.bat / run.sh) and the icons.
 Nothing is built until you pick a target:
 
-  make all        build both launchers into bin/        (Windows .exe with icon + Linux binary)
-  make windows    build bin/claude-usage-tracker.exe only
-  make linux      build bin/claude-usage-tracker only
+  make all        build both launchers next to the README   (Windows .exe with icon + Linux binary)
+  make windows    build claude-usage-tracker.exe only
+  make linux      build claude-usage-tracker only
   make desktop    build the Linux binary and add "Claude Usage Tracker" to your applications menu
   make icons      regenerate the icons in assets/ and web/ from tools/make_icons.py (needs Pillow)
-  make clean      delete bin/
+  make clean      delete the two built launchers
 
 Requirements: Python 3 and `pip install ziglang` (the compiler, cross-compiles for both systems).
+Run this from the app/ folder.
 No make installed (typical on Windows)? Same targets:  python tools/build.py <target>
 """
 
@@ -82,7 +83,8 @@ def main():
         zig("x86_64-linux-musl", "claude-usage-tracker", "tools/launcher.c")
         desktop()
     if what == "clean":
-        shutil.rmtree(BIN, ignore_errors=True)
+        for name in LAUNCHERS:
+            (BIN / name).unlink(missing_ok=True)
     if what not in ("help", "all", "windows", "linux", "icons", "desktop", "clean"):
         sys.exit(f"unknown target: {what}")
 
