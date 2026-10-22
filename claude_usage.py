@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude Usage Tracker : releve du quota Claude (fenetre 5 heures et 7 jours).
+Claude Usage Tracker: takes one reading of your Claude quota (5-hour and 7-day windows).
 
-    python claude_usage.py        -> un releve (c'est ce que lance la tache planifiee)
+    python claude_usage.py        -> one reading (this is what the scheduled task runs)
 
-A chaque releve :
-  - data/usage.csv          : une ligne ajoutee (historique complet)
-  - data/latest.json        : dernier etat + historique recent + ratio estime
-  - data/latest.js          : la meme chose, lisible par web/index.html (meme ouvert en file://)
-  - data/last_response.json : reponse brute de l'API (pour debug)
-  - data/tracker.log        : journal (utile car la tache tourne sans console)
+Each reading writes, inside data/:
+  - usage.csv           one line appended (full history)
+  - latest.json         latest state + recent history + estimated 5h->week ratio
+  - latest.js           same content, loadable by web/index.html even when opened as a file
+  - last_response.json  raw API response (for debugging)
+  - tracker.log         log (useful because the scheduled task has no console)
 
-Source : l'endpoint que Claude Code utilise pour /status (non documente officiellement,
-il peut changer). Le jeton OAuth est lu dans ~/.claude/.credentials.json
-(%USERPROFILE%\\.claude\\.credentials.json sous Windows).
-Uniquement la bibliotheque standard : rien a installer.
+Source: the endpoint Claude Code itself uses for /status (not officially documented,
+it may change). The OAuth token is read from ~/.claude/.credentials.json
+(%USERPROFILE%\\.claude\\.credentials.json on Windows). Standard library only.
 """
 from __future__ import annotations
 
@@ -43,17 +42,24 @@ CSV_FIELDS = [
     "seven_day_sonnet_pct",
 ]
 
-# Hypothese de depart : une fenetre 5 h consommee a 100 % ~ 10 % du quota hebdo.
-# Remplacee automatiquement par une estimation des que l'historique le permet.
+# Starting assumption: one full 5-hour window ~ 10 % of the weekly quota.
+# Replaced automatically by an estimate once the history allows it.
 DEFAULT_RATIO = 10.0
-MIN_5H_POINTS_FOR_RATIO = 20.0   # cumul de % 5 h observes avant de faire confiance a l'estimation
-HISTORY_DAYS = 8                 # historique embarque dans latest.js pour les futurs graphiques
-SAME_WINDOW_TOLERANCE_S = 300    # deux resets_at a moins de 5 min = meme fenetre
+MIN_5H_POINTS_FOR_RATIO = 20.0   # cumulated 5h % observed before trusting the estimate
+HISTORY_DAYS = 8                 # history embedded in latest.js for charts
+SAME_WINDOW_TOLERANCE_S = 300    # two resets_at less than 5 minutes apart = same window
 MAX_LOG_BYTES = 200_000
 
 
 class TrackerError(Exception):
-    """Erreur attendue (jeton absent, reseau, format) : journalisee, pas de traceback."""
+    """Expected failure (missing token, network, bad format): logged, no traceback.
+
+    `code` is a stable identifier the UIs translate (the message itself is English).
+    """
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 # --------------------------------------------------------------------------- dates
@@ -63,13 +69,13 @@ def now_utc() -> datetime:
 
 
 def parse_dt(value) -> datetime | None:
-    """ISO 8601 (avec ou sans fraction / Z) ou epoch secondes -> datetime UTC."""
+    """ISO 8601 (with or without fraction / Z) or epoch seconds -> UTC datetime."""
     if value in (None, ""):
         return None
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(float(value), tz=timezone.utc)
     s = str(value).strip().replace("Z", "+00:00")
-    s = re.sub(r"(\.\d+)(?=[+-]\d\d:\d\d$|$)", "", s)  # Python < 3.11 n'aime pas toutes les fractions
+    s = re.sub(r"(\.\d+)(?=[+-]\d\d:\d\d$|$)", "", s)  # Python < 3.11 rejects some fractions
     try:
         d = datetime.fromisoformat(s)
     except ValueError:
@@ -100,16 +106,20 @@ def read_token() -> str:
     path = base / ".credentials.json"
     if not path.exists():
         raise TrackerError(
-            f"Identifiants Claude Code introuvables ({path}). "
-            "Lance Claude Code et connecte-toi (/login) avec ton abonnement Claude."
+            "no_credentials",
+            f"Claude Code credentials not found ({path}). "
+            "Open Claude Code and sign in (/login) with your Claude subscription.",
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        raise TrackerError(f"Lecture impossible de {path} : {e}")
+        raise TrackerError("bad_credentials", f"Cannot read {path}: {e}")
     token = (data.get("claudeAiOauth") or {}).get("accessToken")
     if not token:
-        raise TrackerError("Pas de accessToken dans .credentials.json : il faut une connexion par abonnement, pas par cle API.")
+        raise TrackerError(
+            "bad_credentials",
+            "No accessToken in .credentials.json: a subscription login is required, not an API key.",
+        )
     return token
 
 
@@ -120,7 +130,7 @@ def fetch_usage(token: str) -> dict:
             "Authorization": f"Bearer {token}",
             "anthropic-beta": "oauth-2025-04-20",
             "Accept": "application/json",
-            "User-Agent": "claude-usage-tracker/0.1",
+            "User-Agent": "claude-usage-tracker/0.2",
         },
     )
     try:
@@ -130,14 +140,15 @@ def fetch_usage(token: str) -> dict:
         body = e.read().decode("utf-8", "replace")[:300]
         if e.code in (401, 403):
             raise TrackerError(
-                f"Acces refuse ({e.code}) : le jeton a sans doute expire. "
-                f"Ouvre Claude Code une fois, il le rafraichit tout seul. Detail : {body}"
+                "auth",
+                f"Access refused ({e.code}): the token has probably expired. "
+                f"Open Claude Code once, it refreshes it by itself. Detail: {body}",
             )
-        raise TrackerError(f"Erreur HTTP {e.code} : {body}")
+        raise TrackerError("http", f"HTTP error {e.code}: {body}")
     except urllib.error.URLError as e:
-        raise TrackerError(f"Reseau indisponible : {e.reason}")
+        raise TrackerError("network", f"Network unavailable: {e.reason}")
     except ValueError as e:
-        raise TrackerError(f"Reponse non JSON : {e}")
+        raise TrackerError("bad_json", f"Response is not JSON: {e}")
 
 
 def window(payload: dict, key: str) -> tuple[float | None, datetime | None]:
@@ -151,7 +162,7 @@ def build_row(payload: dict, ts: datetime) -> dict:
     f5, r5 = window(payload, "five_hour")
     f7, r7 = window(payload, "seven_day")
     if f5 is None and f7 is None:
-        raise TrackerError(f"Reponse inattendue, cles recues : {sorted(payload)[:12]}")
+        raise TrackerError("unexpected_response", f"Unexpected response, keys received: {sorted(payload)[:12]}")
     opus, _ = window(payload, "seven_day_opus")
     sonnet, _ = window(payload, "seven_day_sonnet")
 
@@ -169,7 +180,7 @@ def build_row(payload: dict, ts: datetime) -> dict:
     }
 
 
-# --------------------------------------------------------------------------- stockage
+# --------------------------------------------------------------------------- storage
 
 def append_csv(path: Path, row: dict) -> None:
     new = not path.exists()
@@ -195,10 +206,10 @@ def _same(a: datetime | None, b: datetime | None) -> bool:
 
 def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
     """
-    Combien de % hebdo coute une fenetre 5 h pleine.
-    On cumule, entre releves consecutifs dans les MEMES fenetres (pas de reset entre deux),
-    la hausse du 5 h et la hausse du 7 j : ratio = 100 * somme(d7) / somme(d5).
-    Retourne (ratio ou None si pas assez de donnees, cumul de points 5 h observes).
+    How many % of the week one full 5-hour window costs.
+    Between consecutive readings inside the SAME windows (no reset in between) we add up
+    the 5h increase and the 7d increase: ratio = 100 * sum(d7) / sum(d5).
+    Returns (ratio, or None when there is not enough data; total 5h points observed).
     """
     s5 = s7 = 0.0
     for a, b in zip(rows, rows[1:]):
@@ -225,7 +236,7 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def extract_breakdown(payload: dict) -> dict | None:
-    """Repartition de l'usage hebdo par produit (Claude Code, Chats, Cowork...), en % de ce qui a ete consomme."""
+    """Weekly usage split by product (Claude Code, Chats, Cowork...), as % of what was used."""
     b = payload.get("seven_day_breakdown")
     if not isinstance(b, dict) or not isinstance(b.get("rows"), list):
         return None
@@ -244,7 +255,7 @@ def previous_breakdown(data_dir: Path) -> dict | None:
 
 
 def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | None,
-                  breakdown: dict | None = None) -> dict:
+                  breakdown: dict | None = None, error_code: str | None = None) -> dict:
     last = rows[-1] if rows else None
     ratio, ratio_points = estimate_ratio(rows)
     cutoff = now - timedelta(days=HISTORY_DAYS)
@@ -266,6 +277,7 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
         "history": history,
         "breakdown": breakdown,
         "error": error,
+        "error_code": error_code,
     }
     text = json.dumps(state, ensure_ascii=False, indent=1)
     _atomic_write(data_dir / "latest.json", text)
@@ -284,13 +296,16 @@ def log(data_dir: Path, msg: str) -> None:
         pass
 
 
-# --------------------------------------------------------------------------- point d'entree
+# --------------------------------------------------------------------------- entry point
 
 def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | None = None):
-    """Un releve complet. `payload` permet aux tests d'injecter une reponse API."""
+    """One complete reading. `payload` lets tests inject an API response.
+
+    Returns (row or None, error message or None, state dict).
+    """
     now = now or now_utc()
     data_dir.mkdir(parents=True, exist_ok=True)
-    row, error, breakdown = None, None, None
+    row, error, error_code, breakdown = None, None, None, None
     try:
         if payload is None:
             payload = fetch_usage(read_token())
@@ -299,38 +314,38 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
         append_csv(data_dir / "usage.csv", row)
         breakdown = extract_breakdown(payload)
     except TrackerError as e:
-        error = str(e)
+        error, error_code = str(e), e.code
     if breakdown is None:
         breakdown = previous_breakdown(data_dir)
-    state = write_outputs(data_dir, load_history(data_dir / "usage.csv"), now, error, breakdown)
+    state = write_outputs(data_dir, load_history(data_dir / "usage.csv"), now, error, breakdown, error_code)
     if error:
-        log(data_dir, "ERREUR " + error)
+        log(data_dir, "ERROR " + error)
     else:
-        log(data_dir, f"OK 5h={row['five_hour_pct']}% 7j={row['seven_day_pct']}%")
+        log(data_dir, f"OK 5h={row['five_hour_pct']}% 7d={row['seven_day_pct']}%")
     return row, error, state
 
 
 def _fmt_reset(s: str) -> str:
     d = parse_dt(s)
     if not d:
-        return "pas de fenetre active"
+        return "no active window"
     left = d - now_utc()
     h, m = divmod(max(0, int(left.total_seconds() // 60)), 60)
-    j, h = divmod(h, 24)
+    days, h = divmod(h, 24)
     when = d.astimezone().strftime("%a %d/%m %H:%M")
-    return f"reset {when} (dans {f'{j} j ' if j else ''}{h} h {m:02d})"
+    return f"resets {when} (in {f'{days} d ' if days else ''}{h} h {m:02d})"
 
 
 def main() -> int:
     row, error, state = run()
     if error:
-        print("ERREUR :", error)
+        print("ERROR:", error)
         return 1
-    print(f"5 heures : {row['five_hour_pct'] or '-'} %  | {_fmt_reset(row['five_hour_resets_at'])}")
-    print(f"7 jours  : {row['seven_day_pct'] or '-'} %  | {_fmt_reset(row['seven_day_resets_at'])}")
+    print(f"5 hours : {row['five_hour_pct'] or '-'} %  | {_fmt_reset(row['five_hour_resets_at'])}")
+    print(f"7 days  : {row['seven_day_pct'] or '-'} %  | {_fmt_reset(row['seven_day_resets_at'])}")
     r = state["ratio_estimate"]
-    print(f"Releves enregistres : {state['samples']}  | ratio 5h->7j : "
-          + (f"{r} % (estime)" if r else f"{DEFAULT_RATIO} % (hypothese, pas encore assez de donnees)"))
+    print(f"Readings stored: {state['samples']}  | 5h->7d ratio: "
+          + (f"{r} % (estimated)" if r else f"{DEFAULT_RATIO} % (assumption, not enough data yet)"))
     return 0
 
 

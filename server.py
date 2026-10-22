@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Serveur local du widget (Windows, Linux, macOS ; bibliotheque standard uniquement).
+Local server for the widget (Windows, Linux, macOS; standard library only).
 
-    python server.py            -> http://127.0.0.1:8765/
-    python server.py --open     -> idem + ouvre le navigateur (s'il tourne deja : ouvre juste le navigateur)
+    python server.py                    -> http://127.0.0.1:8765/
+    python server.py --open             -> same, and opens the browser
+                                           (if a server is already running: only opens the browser)
+    python server.py --open --lang fr   -> opens the widget in French (fr or en)
 
-Routes :
-    GET  /                   -> redirige vers /web/index.html
-    GET  /web/...            -> fichiers du widget
-    GET  /data/latest.json   -> dernier etat
-    GET  /api/ping           -> verifie que c'est bien ce serveur
-    POST /api/refresh        -> lance un releve (comme releve_maintenant) et renvoie l'etat
+Routes:
+    GET  /                   -> redirects to /web/index.html
+    GET  /web/...            -> widget files
+    GET  /data/latest.json   -> latest state (also latest.js)
+    GET  /api/ping           -> identifies this server (and its process id, so the launcher can stop it)
+    POST /api/refresh        -> takes a reading now and returns the new state
 
-Ecoute uniquement sur 127.0.0.1 : rien n'est expose sur le reseau.
+Listens on 127.0.0.1 only: nothing is exposed to the network.
 """
 from __future__ import annotations
 
 import argparse
 import importlib
 import json
+import os
 import threading
 import urllib.request
 import webbrowser
@@ -34,7 +37,7 @@ APP_ID = "claude-usage-tracker"
 DEFAULT_PORT = 8765
 _refresh_lock = threading.Lock()
 
-# Table fixe : sous Windows, mimetypes lit le registre et sert parfois le .js en text/plain.
+# Fixed table: on Windows, mimetypes reads the registry and sometimes serves .js as text/plain.
 TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -47,9 +50,9 @@ TYPES = {
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ClaudeUsage/0.2"
+    server_version = "ClaudeUsage/0.3"
 
-    def log_message(self, fmt, *args):  # silencieux (pythonw n'a pas de console)
+    def log_message(self, fmt, *args):  # silent (pythonw has no console)
         pass
 
     def _send(self, code: int, body: bytes, ctype: str, extra: dict | None = None):
@@ -66,23 +69,25 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"), TYPES[".json"])
 
     def _not_found(self):
-        self._json(404, {"error": "introuvable"})
+        self._json(404, {"error": "not found"})
 
     def _host_ok(self) -> bool:
-        """Anti DNS-rebinding : seule l'adresse locale est acceptee dans l'en-tete Host.
-        Sans ca, une page distante pourrait pointer son nom de domaine vers 127.0.0.1
-        et interroger ce serveur depuis le navigateur."""
+        """Anti DNS-rebinding: only the local address is accepted in the Host header.
+        Without this, a remote page could point its domain name at 127.0.0.1
+        and query this server from the browser."""
         port = self.server.server_address[1]
         return (self.headers.get("Host") or "").lower() in (f"127.0.0.1:{port}", f"localhost:{port}")
 
     def do_GET(self):
         if not self._host_ok():
-            return self._json(403, {"error": "hote refuse"})
+            return self._json(403, {"error": "host refused"})
         path = self.path.split("?", 1)[0]
         if path == "/api/ping":
-            return self._json(200, {"app": APP_ID})
+            return self._json(200, {"app": APP_ID, "pid": os.getpid()})
         if path in ("/", "/index.html", "/web", "/web/"):
-            return self._send(302, b"", "text/plain", {"Location": "/web/index.html"})
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            target = "/web/index.html" + ("?" + query if query else "")
+            return self._send(302, b"", "text/plain", {"Location": target})
         if path in ("/data/latest.json", "/data/latest.js"):
             f = cu.DATA_DIR / path.rsplit("/", 1)[1]
         elif path.startswith("/web/"):
@@ -97,46 +102,49 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if not self._host_ok():
-            return self._json(403, {"error": "hote refuse"})
+            return self._json(403, {"error": "host refused"})
         if self.path.split("?", 1)[0] != "/api/refresh":
             return self._not_found()
-        # Refuse les requetes venant d'une autre page web que le widget lui-meme.
+        # Refuse requests coming from a web page other than the widget itself.
         origin = self.headers.get("Origin")
         if origin and origin != f"http://{self.headers.get('Host', '')}":
-            return self._json(403, {"error": "origine refusee"})
+            return self._json(403, {"error": "origin refused"})
         with _refresh_lock:
-            importlib.reload(cu)          # prend en compte les mises a jour du script sans redemarrer le serveur
+            importlib.reload(cu)          # picks up script updates without restarting the server
             row, error, state = cu.run()
         self._json(200 if error is None else 502, {"ok": error is None, "error": error, "state": state})
 
 
-def already_running(port: int) -> bool:
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # ignore les proxys systeme
+def ping(port: int) -> dict | None:
+    """Return the /api/ping answer if OUR server listens on `port`, else None."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # ignore system proxies
     try:
         with opener.open(f"http://127.0.0.1:{port}/api/ping", timeout=1) as r:
-            return json.load(r).get("app") == APP_ID
+            data = json.load(r)
+            return data if data.get("app") == APP_ID else None
     except Exception:
-        return False
+        return None
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Serveur local du widget de quota Claude")
+    ap = argparse.ArgumentParser(description="Local server for the Claude usage widget")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
-    ap.add_argument("--open", action="store_true", help="ouvre le widget dans le navigateur")
+    ap.add_argument("--open", action="store_true", help="open the widget in the browser")
+    ap.add_argument("--lang", choices=("en", "fr"), help="language the widget opens in")
     args = ap.parse_args()
-    url = f"http://127.0.0.1:{args.port}/web/index.html"
+    url = f"http://127.0.0.1:{args.port}/web/index.html" + (f"?lang={args.lang}" if args.lang else "")
 
-    if already_running(args.port):
-        print("Serveur deja lance :", url)
+    if ping(args.port):
+        print("Server already running:", url)
         if args.open:
             webbrowser.open(url)
         return 0
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     except OSError as e:
-        print(f"Impossible d'ecouter sur le port {args.port} : {e}. Essaie --port 8766.")
+        print(f"Cannot listen on port {args.port}: {e}. Try --port 8766.")
         return 1
-    print(f"Widget : {url}   (Ctrl+C pour arreter)")
+    print(f"Widget: {url}   (Ctrl+C to stop)")
     if args.open:
         threading.Timer(0.4, webbrowser.open, [url]).start()
     try:

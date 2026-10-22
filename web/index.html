@@ -1,45 +1,62 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Quota Claude</title>
+  <title>Claude usage</title>
   <link rel="stylesheet" href="css/style.css">
   <script>
-    /* Diagnostic : si un script ne charge pas (bloqueur de pub, fichier manquant) ou plante, on l'affiche. */
+    /* Diagnostic: if a script fails to load (ad blocker, missing file) or crashes, say so on the page.
+       Bilingual on purpose: it must work even when i18n.js itself is the script that failed. */
     window.addEventListener("error", function (e) {
       var src = e.target && e.target.src, el = document.getElementById("err");
-      if (!el || (src && src.indexOf("latest.js") !== -1)) return;   // pas encore de donnees : normal
+      if (!el || (src && src.indexOf("latest.js") !== -1)) return;   // no data yet: normal
       el.hidden = false;
       el.textContent = src
-        ? "Script bloqué ou introuvable : " + src + ". Un bloqueur de pub (uBlock…) ? Désactive-le pour 127.0.0.1."
-        : "Erreur JavaScript : " + e.message + " (" + (e.filename || "") + ":" + (e.lineno || "") + ")";
+        ? "Script blocked or missing / bloqu\u00e9 ou introuvable: " + src
+          + " - ad blocker (uBlock...)? Disable it for 127.0.0.1 / d\u00e9sactive-le pour 127.0.0.1."
+        : "JavaScript error / Erreur JavaScript: " + e.message + " (" + (e.filename || "") + ":" + (e.lineno || "") + ")";
     }, true);
   </script>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>Quota Claude<span>.</span></h1>
+      <h1><span data-i18n="app.title">Claude usage</span><span class="accent">.</span></h1>
       <div class="tools">
         <span class="meta" id="meta">—</span>
-        <div class="seg" role="group" aria-label="Présentation">
-          <button type="button" data-view="detail" aria-pressed="true">Détaillé</button>
-          <button type="button" data-view="compact" aria-pressed="false">Compact</button>
+        <div class="seg" role="group" data-i18n-aria="view.label">
+          <button type="button" data-view="detail" aria-pressed="true" data-i18n="view.detail">Detailed</button>
+          <button type="button" data-view="compact" aria-pressed="false" data-i18n="view.compact">Compact</button>
         </div>
-        <button type="button" class="btn" id="refresh" title="Faire un relevé maintenant">
+        <div class="seg lang" role="group" data-i18n-aria="lang.label">
+          <button type="button" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+        </div>
+        <button type="button" class="btn" id="refresh" data-i18n-title="refresh.title">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Relever
+          <span data-i18n="refresh">Refresh</span>
         </button>
       </div>
     </header>
     <div id="err" class="err" hidden></div>
-    <main id="app"></main>
+    <div class="layout">
+      <main id="app"></main>
+      <aside class="hours card" id="hours-box" data-i18n-title="hours.hint">
+        <h2 data-i18n="hours.title">Hours per day</h2>
+        <output id="hours-value" for="hours" class="hours-value">8 h</output>
+        <div class="slider">
+          <div class="ticks" id="hours-ticks" aria-hidden="true"></div>
+          <input type="range" id="hours" min="1" max="24" step="1" value="8" data-i18n-aria="hours.aria">
+        </div>
+      </aside>
+    </div>
     <footer class="foot" id="foot"></footer>
   </div>
 
-  <!-- donnees initiales (fonctionne aussi en file://) -->
+  <!-- initial data (also works when this page is opened as a plain file) -->
   <script src="../data/latest.js"></script>
+  <script src="js/i18n.js"></script>
   <script src="js/model.js"></script>
   <script src="js/gauge.js"></script>
   <script src="js/views.js"></script>

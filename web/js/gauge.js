@@ -1,8 +1,8 @@
-/* gauge.js : dessin SVG des compteurs (arc de 270°, de bas-gauche a bas-droite).
-   CU.gauge({ rings, center, footer }) -> chaine SVG.
-     rings  : [{ r, width, used, color, markers: [{ v, color, side: "out" | "in" }] }]  (le 1er = le plus a l'exterieur)
-     center : [{ dy, text, size, fill, serif }]  lignes de texte centrees (dy relatif au centre)
-     footer : texte sous l'arc */
+/* gauge.js: SVG drawing of the gauges (270 degree arc, from bottom-left to bottom-right).
+   CU.gauge({ rings, center, footer, label }) -> SVG string.
+     rings  : [{ r, width, used, color, markers: [{ v, color, side: "out" | "in" }] }]  (the first one is the outermost)
+     center : [{ dy, text, size, fill, serif }]  centered text lines (dy relative to the center)
+     footer : text under the arc */
 window.CU = window.CU || {};
 
 (function (CU) {
@@ -29,7 +29,7 @@ window.CU = window.CU || {};
     return s;
   }
 
-  // Repere : trait a travers l'anneau + triangle a l'exterieur (out) ou a l'interieur (in), pointant vers l'anneau.
+  // Marker: a tick across the ring + a triangle outside (out) or inside (in) pointing at the ring.
   function marker(m, ring) {
     if (m.v == null || !isFinite(m.v)) return "";
     const v = clamp(m.v), half = ring.width / 2;
