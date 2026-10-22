@@ -11,22 +11,24 @@
   }
 
   const SERVED = location.protocol.startsWith("http");
-  const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen";
+  const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen", FORMULAS_KEY = "cu.formulasOpen";
   const HOURS_KEY = "cu.hours";
-  let view = "detail", breakdownOpen = false, hours = 8;
+  let view = "detail", breakdownOpen = false, formulasOpen = false, hours = 8;
   try {
     const saved = parseInt(localStorage.getItem(HOURS_KEY), 10);
     if (saved >= 1 && saved <= 24) hours = saved;
     view = localStorage.getItem(VIEW_KEY) || "detail";
     breakdownOpen = localStorage.getItem(BREAKDOWN_KEY) === "1";
+    formulasOpen = localStorage.getItem(FORMULAS_KEY) === "1";
   } catch (e) { /* storage unavailable */ }
   if (!CU.views[view]) view = "detail";
 
   // the breakdown <details> is recreated on every render: remember whether it is open
   $("app").addEventListener("toggle", e => {
-    if (!e.target.classList.contains("breakdown")) return;
-    breakdownOpen = e.target.open;
-    try { localStorage.setItem(BREAKDOWN_KEY, breakdownOpen ? "1" : "0"); } catch (err) { /* ignore */ }
+    const isFormulas = e.target.classList.contains("formulas");
+    if (!isFormulas && !e.target.classList.contains("breakdown")) return;
+    if (isFormulas) formulasOpen = e.target.open; else breakdownOpen = e.target.open;
+    try { localStorage.setItem(isFormulas ? FORMULAS_KEY : BREAKDOWN_KEY, e.target.open ? "1" : "0"); } catch (err) { /* ignore */ }
   }, true);
 
   /* ---------- data ---------- */
@@ -63,7 +65,7 @@
       $("meta").textContent = "—";
       return;
     }
-    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen);
+    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.formulas(m, formulasOpen);
 
     $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) : "—";
     $("meta").classList.toggle("stale", m.age > 30 * 60e3);

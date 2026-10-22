@@ -126,5 +126,40 @@ window.CU = window.CU || {};
       </details>`;
   };
 
+  /* ---------------- "how it is computed" panel: every equation, with your current numbers ---------------- */
+  CU.formulas = function (m, open) {
+    const { five, seven } = m, H = 3600e3, dash = "—";
+    const hl5 = five.left / H, dl7 = seven.left / (24 * H);
+    const p1 = v => v == null ? dash : pct(v, 1), n2 = v => v == null ? dash : num(v, 2);
+    const rows = [
+      ["used", "", "", `${p1(five.used)} / ${p1(seven.used)}`],
+      ["pace5", "", `(5 h − ${n2(hl5)} h) / 5 h`, p1(five.pace)],
+      ["pace7", "", `(7 d − ${n2(dl7)} d) / 7 d`, p1(seven.pace)],
+      ["ratio", "", m.ratioEstimated ? t("f.ratio.est") : t("f.ratio.def"), p1(m.ratio)],
+      ["u0", "", "", p1(seven.startUsed)],
+      ["days", "", "", n2(seven.daysLeft) + " d"],
+      ["budget", "", `(100 − ${p1(seven.startUsed)}) / ${n2(seven.daysLeft)}`, p1(seven.dailyBudget)],
+      ["l7", "", `${p1(seven.startUsed)} + ${p1(seven.dailyBudget)}`, p1(seven.limit)],
+      ["left", "", `max(0, ${p1(seven.limit)} − ${p1(seven.used)})`, p1(seven.todayLeft)],
+      ["l5", "", `${p1(five.used)} + ${p1(seven.todayLeft)} × 100 / ${p1(m.ratio)}`, p1(five.limit)],
+      ["rate", "slider", `${p1(seven.dailyBudget)} / ${m.hours} h × 100 / ${p1(m.ratio)}`, p1(five.paceRate) + t("unit.perhour")],
+      ["max", "", `(100 − ${p1(five.used)}) / ${n2(hl5)} h`, p1(five.maxRate) + t("unit.perhour")],
+      ["win", "", `(100 − ${p1(seven.used)}) / ${p1(m.ratio)}`, "≈ " + num(seven.sessionsLeft)],
+      ["share", "", "", ""],
+    ];
+    return `
+      <details class="card formulas" data-key="formulas"${open ? " open" : ""}>
+        <summary><h2>${t("formulas.title")}</h2><span class="hint">${t("formulas.hint")}</span></summary>
+        <p class="note">${t("formulas.slider")}</p>
+        <table class="eqs">
+          ${rows.map(([id, flag, calc, val]) => `
+            <tr${flag ? ' class="flag"' : ""}>
+              <th>${t("f." + id + ".name")}${flag ? ` <span class="badge">${t("formulas.badge")}</span>` : ""}</th>
+              <td><code>${t("f." + id + ".eq")}</code>${calc || val ? `<br><span class="calc">${calc}${val ? (calc ? " = " : "") + "<b>" + val + "</b>" : ""}</span>` : ""}</td>
+            </tr>`).join("")}
+        </table>
+      </details>`;
+  };
+
   CU.views = { detail, compact };
 })(window.CU);

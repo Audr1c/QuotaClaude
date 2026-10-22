@@ -43,6 +43,7 @@ window.CU = window.CU || {};
     const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
     const startUsed = usedAt(D.history, dayStart.getTime(), seven.used);
     const daysLeft = seven.active ? Math.max((seven.reset.getTime() - dayStart.getTime()) / (24 * H), 0.25) : 1;
+    seven.startUsed = startUsed; seven.daysLeft = daysLeft;
     seven.dailyBudget = (100 - startUsed) / daysLeft;                 // weekly % per day
     seven.limit = seven.active ? clamp(startUsed + seven.dailyBudget) : null;   // cumulative weekly % allowed by now
     seven.todayUsed = Math.max(0, seven.used - startUsed);
