@@ -71,7 +71,7 @@ make linux      bin/claude-usage-tracker
 make desktop    add "Claude Usage Tracker" to the Linux applications menu
 make icons      regenerate assets/ and web/favicon.* from tools/make_icons.py
 make clean      remove bin/
-python tools/build.py [windows|linux|all]    same thing without make (e.g. on Windows)
+python tools/build.py [windows|linux|icons|desktop|clean]    same thing without make (e.g. on Windows)
 ```
 
 How it works: `tools/launcher.c` finds `run.bat` (Windows) or `run.sh` (Linux) next to itself (or one folder up) and starts it. `tools/make_icons.py` draws the logo once and writes the SVG, PNG and ICO files. The prebuilt binaries are unsigned, so Windows SmartScreen may warn you the first time; rebuild them from source if you prefer.
