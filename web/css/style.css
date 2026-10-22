@@ -136,14 +136,3 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
 .empty code { background: var(--track); padding: 2px 6px; border-radius: 5px; color: var(--text); }
 
-/* ---------- speedometer-style meters under the compact stats ---------- */
-.meter { position: relative; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 4px 0; background: var(--track); }
-.meter .zone { position: absolute; top: 0; bottom: 0; opacity: .28; }
-.meter .zone.ok { left: 0; background: var(--ok); }
-.meter .zone.bad { right: 0; background: var(--bad); }
-.meter .f { position: absolute; top: 0; bottom: 0; left: 0; }
-.meter .f.ok { background: var(--ok); }
-.meter .f.bad { background: var(--bad); }
-.meter u { position: absolute; top: -1px; bottom: -1px; width: 2px; margin-left: -1px; background: var(--text); opacity: .55; }
-.mcap { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
-.meter.is-over + .mcap { color: var(--bad); }

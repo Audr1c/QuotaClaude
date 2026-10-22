@@ -18,22 +18,6 @@ window.CU = window.CU || {};
     : t("reset.none");
   const budgetText = b => b >= 100 ? t("cap") : pct(b);
 
-  /* Speedometer-style bar. Zones: green up to `limit`, red beyond. The strong fill is the measured `value`;
-     the paler part is the zone still available. Returns "" when there is nothing sensible to draw. */
-  function meter(value, limit, caption) {
-    if (!(limit > 0) || !isFinite(limit)) return "";
-    const v = value == null || !isFinite(value) ? null : Math.max(0, value);
-    const scale = Math.max(limit * 1.6, (v || 0) * 1.08);
-    const p = x => (Math.min(x, scale) / scale * 100).toFixed(2);
-    const over = v != null && v > limit;
-    const fill = v == null ? "" : `<i class="f ok" style="width:${p(Math.min(v, limit))}%"></i>`
-      + (over ? `<i class="f bad" style="left:${p(limit)}%;width:${(p(v) - p(limit)).toFixed(2)}%"></i>` : "");
-    return `<div class="meter${over ? " is-over" : ""}" role="img" aria-label="${caption}">
-        <span class="zone ok" style="width:${p(limit)}%"></span><span class="zone bad" style="left:${p(limit)}%"></span>
-        ${fill}<u style="left:${p(limit)}%"></u>
-      </div><small class="mcap">${caption}</small>`;
-  }
-
   /* ---------------- detailed view: two cards ---------------- */
   function detail(m) {
     const { five, seven } = m;
@@ -42,7 +26,7 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.five")}</h2>${pill(CU.status(five.used, five.pace))}</div>
         ${CU.gauge({
           label: t("card.five"),
-          rings: [{ r: 118, width: 20, used: five.used, color: BLUE,
+          rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.active ? five.budget : null,
                     markers: [{ v: five.pace, color: BLUE_INK }, { v: five.budget, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(five.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
@@ -62,7 +46,7 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.seven")}</h2>${pill(CU.status(seven.used, seven.pace))}</div>
         ${CU.gauge({
           label: t("card.seven"),
-          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, markers: [{ v: seven.pace, color: CLAY_INK }] }],
+          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, limit: seven.pace, markers: [{ v: seven.pace, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(seven.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
           footer: resetText(seven),
@@ -85,8 +69,8 @@ window.CU = window.CU || {};
     const svg = CU.gauge({
       label: t("gauge.aria.compact"),
       rings: [
-        { r: 126, width: 16, used: seven.used, color: CLAY, markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
-        { r: 92, width: 16, used: five.used, color: BLUE,
+        { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.pace, markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
+        { r: 92, width: 16, used: five.used, color: BLUE, limit: five.active ? five.budget : null,
           markers: [{ v: five.pace, color: BLUE_INK, side: "in" }, { v: five.budget, color: CLAY_INK, side: "out" }] },
       ],
       center: [
@@ -112,12 +96,9 @@ window.CU = window.CU || {};
           ${li("tri", CLAY_INK, t("compact.legend.pace7"), pct(seven.pace))}
         </ul>
         <div class="stats">
-          <div><b>${pct(five.paceRate, 1)}</b><span>${t("stat.rate")}</span>
-            ${meter(five.currentRate, five.paceRate, t("meter.now", { v: five.currentRate == null ? "—" : pct(five.currentRate, 1) + t("unit.perhour") }))}</div>
-          <div><b>${pct(seven.ratePerDay, 1)}</b><span>${t("stat.day")}</span>
-            ${meter(seven.usedLast24h, seven.ratePerDay, t("meter.day", { v: seven.usedLast24h == null ? "—" : pct(seven.usedLast24h, 1) }))}</div>
-          <div><b>≈ ${num(seven.sessionsLeft)}</b><span>${t("stat.windows")}</span>
-            ${meter(seven.plannedWindows, seven.sessionsLeft, t("meter.planned", { v: "≈ " + num(seven.plannedWindows) }))}</div>
+          <div><b>${pct(five.paceRate, 1)}</b><span>${t("stat.rate")}</span></div>
+          <div><b>${pct(seven.ratePerDay, 1)}</b><span>${t("stat.day")}</span></div>
+          <div><b>≈ ${num(seven.sessionsLeft)}</b><span>${t("stat.windows")}</span></div>
         </div>
       </section>`;
   }

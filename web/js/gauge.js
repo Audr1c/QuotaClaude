@@ -1,6 +1,6 @@
 /* gauge.js: SVG drawing of the gauges (270 degree arc, from bottom-left to bottom-right).
    CU.gauge({ rings, center, footer, label }) -> SVG string.
-     rings  : [{ r, width, used, color, markers: [{ v, color, side: "out" | "in" }] }]  (the first one is the outermost)
+     rings  : [{ r, width, used, color, limit (optional: green up to it, red beyond), markers: [{ v, color, side: "out" | "in" }] }]  (the first one is the outermost)
      center : [{ dy, text, size, fill, serif }]  centered text lines (dy relative to the center)
      footer : text under the arc */
 window.CU = window.CU || {};
@@ -42,12 +42,31 @@ window.CU = window.CU || {};
       + `<polygon points="${f(tip[0])},${f(tip[1])} ${f(base[0] + 6 * px)},${f(base[1] + 6 * py)} ${f(base[0] - 6 * px)},${f(base[1] - 6 * py)}" fill="${m.color}"/>`;
   }
 
+  let uid = 0;
+  /* Speedometer zones on the unfilled track: green up to `limit`, red beyond it. Masked by the track shape so the
+     ends stay round. */
+  function zones(ring) {
+    const lim = ring.limit;
+    if (lim == null || !isFinite(lim)) return "";
+    const id = "zm" + (++uid), L = clamp(lim);
+    const track = `<path d="${arc(0, 100, ring.r)}" fill="none" stroke="#fff" stroke-width="${ring.width}" stroke-linecap="round"/>`;
+    // red everywhere (round caps cover the ring end), then green over it up to the limit (+ a dot for the round start)
+    const [x0, y0] = pt(0, ring.r);
+    let s = `<mask id="${id}">${track}</mask><g mask="url(#${id})" opacity=".34">`;
+    s += `<path d="${arc(0, 100, ring.r)}" fill="none" stroke="var(--bad)" stroke-width="${ring.width + 2}" stroke-linecap="round"/>`;
+    if (L >= 100) s += `<path d="${arc(0, 100, ring.r)}" fill="none" stroke="var(--ok)" stroke-width="${ring.width + 2}" stroke-linecap="round"/>`;
+    else if (L > 0) s += `<path d="${arc(0, L, ring.r)}" fill="none" stroke="var(--ok)" stroke-width="${ring.width + 2}"/>`
+      + `<circle cx="${f(x0)}" cy="${f(y0)}" r="${ring.width / 2 + 1}" fill="var(--ok)"/>`;
+    return s + `</g>`;
+  }
+
   CU.gauge = function ({ rings, center = [], footer = "", label = "" }) {
     const outer = rings[0];
     let s = `<svg class="gauge" viewBox="0 0 320 290" role="img" aria-label="${label}">`;
     s += ticks(outer.r + outer.width / 2 + 5);
     for (const ring of rings) {
       s += `<path d="${arc(0, 100, ring.r)}" fill="none" stroke="var(--track)" stroke-width="${ring.width}" stroke-linecap="round"/>`;
+      s += zones(ring);
       if (ring.used > 0.3)
         s += `<path d="${arc(0, clamp(ring.used), ring.r)}" fill="none" stroke="${ring.color}" stroke-width="${ring.width}" stroke-linecap="round"/>`;
     }

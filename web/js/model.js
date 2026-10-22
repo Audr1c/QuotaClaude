@@ -18,28 +18,6 @@ window.CU = window.CU || {};
     };
   }
 
-  /* Positive increments only: a drop is a window reset, not negative consumption. Returns null without enough data. */
-  function increments(history, key, span, now) {
-    const pts = (history || []).map(r => ({ t: Date.parse(r.t), v: r[key] })).filter(p => p.t >= now - span && p.t <= now && p.v != null);
-    if (pts.length < 2) return null;
-    let sum = 0;
-    for (let i = 1; i < pts.length; i++) sum += Math.max(0, pts[i].v - pts[i - 1].v);
-    return { sum, hours: (pts[pts.length - 1].t - pts[0].t) / H };
-  }
-  function recentRate(history, key, span, now, win5) {
-    const inc = increments(history, key, span, now);
-    if (inc && inc.hours > 0.05) return inc.sum / inc.hours;
-    if (win5) {                                       // too few readings: average since the window opened
-      const elapsed = (FIVE_H - win5.left) / H;
-      if (elapsed > 0.1) return win5.used / elapsed;
-    }
-    return null;
-  }
-  function recentUsed(history, key, span, now) {
-    const inc = increments(history, key, span, now);
-    return inc ? inc.sum : null;
-  }
-
   CU.compute = function (D, now = Date.now(), opts = {}) {
     if (!D || !D.seven_day) return null;
     const ratio = D.ratio_estimate || D.ratio_default;   // % of the week one full 5-hour window costs
@@ -61,10 +39,6 @@ window.CU = window.CU || {};
     five.maxRate = (100 - five.used) / (five.left / H);      // 5h-% per hour to end exactly at the reset
     five.paceRate = seven.ratePerHour * 100 / ratio;          // 5h-% per hour at the weekly pace
 
-    seven.activeHoursLeft = activeHoursLeft;
-    five.currentRate = recentRate(D.history, "h5", H, now, five.active ? five : null);   // 5h-% per hour, last hour
-    seven.usedLast24h = recentUsed(D.history, "d7", 24 * H, now);                       // weekly % consumed over 24 h
-    seven.plannedWindows = activeHoursLeft / 5;                                           // 5-hour windows you plan to work
 
     const fetched = D.fetched_at ? Date.parse(D.fetched_at) : null;
     return {
