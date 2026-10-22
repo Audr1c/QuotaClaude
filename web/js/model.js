@@ -18,6 +18,15 @@ window.CU = window.CU || {};
     };
   }
 
+  /* weekly % used at a given moment (last reading before it; the oldest reading when the history starts later) */
+  function usedAt(history, ts, current) {
+    const pts = (history || []).map(r => ({ t: Date.parse(r.t), v: r.d7 })).filter(p => p.v != null && !isNaN(p.t));
+    if (!pts.length) return current;
+    let p = pts[0];
+    for (const q of pts) if (q.t <= ts) p = q;
+    return p.v > current ? 0 : p.v;                // a higher value means the week reset since: start from 0
+  }
+
   CU.compute = function (D, now = Date.now(), opts = {}) {
     if (!D || !D.seven_day) return null;
     const ratio = D.ratio_estimate || D.ratio_default;   // % of the week one full 5-hour window costs
@@ -27,15 +36,23 @@ window.CU = window.CU || {};
     // Hours of Claude per day (slider): the rest of the week is spread over the hours you actually work,
     // not over every hour of the week. 24 = no assumption (the old behaviour).
     const hours = clamp(opts.hoursPerDay || 24, 1, 24);
-    const activeHoursLeft = Math.max(seven.left / H * hours / 24, 0.25);
-    seven.ratePerHour = seven.remaining / activeHoursLeft;    // weekly % per hour worked
-    seven.ratePerDay = seven.remaining / (seven.left / H / 24); // weekly % per calendar day left
     seven.sessionsLeft = seven.remaining / ratio;
 
+    // Daily budget (like a data-plan app): what was left of the week when today began, split over the days
+    // until the reset. Staying below `limit` = still inside today's budget.
+    const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+    const startUsed = usedAt(D.history, dayStart.getTime(), seven.used);
+    const daysLeft = seven.active ? Math.max((seven.reset.getTime() - dayStart.getTime()) / (24 * H), 0.25) : 1;
+    seven.dailyBudget = (100 - startUsed) / daysLeft;                 // weekly % per day
+    seven.limit = seven.active ? clamp(startUsed + seven.dailyBudget) : null;   // cumulative weekly % allowed by now
+    seven.todayUsed = Math.max(0, seven.used - startUsed);
+    seven.todayLeft = seven.limit == null ? 0 : Math.max(0, seven.limit - seven.used);
+    seven.ratePerDay = seven.dailyBudget;
+    seven.ratePerHour = seven.dailyBudget / hours;                    // spread over the hours you work (slider)
+
     const five = win(D.five_hour, FIVE_H, now);
-    // share of the remaining weekly budget that falls inside this window, converted to % of a 5-hour window
-    const weeklyShare = seven.ratePerHour * Math.min(five.left, seven.left) / H;
-    five.budget = five.used + weeklyShare * 100 / ratio;
+    // today's remaining budget expressed in % of a 5-hour window: the 5-hour usage you can reach and still be on budget
+    five.limit = five.active && seven.limit != null ? Math.min(100, five.used + seven.todayLeft * 100 / ratio) : null;
     five.maxRate = (100 - five.used) / (five.left / H);      // 5h-% per hour to end exactly at the reset
     five.paceRate = seven.ratePerHour * 100 / ratio;          // 5h-% per hour at the weekly pace
 

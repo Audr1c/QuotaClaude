@@ -26,8 +26,8 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.five")}</h2>${pill(CU.status(five.used, five.pace))}</div>
         ${CU.gauge({
           label: t("card.five"),
-          rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.active ? five.budget : null,
-                    markers: [{ v: five.pace, color: BLUE_INK }, { v: five.budget, color: CLAY_INK }] }],
+          rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.limit,
+                    markers: [{ v: five.pace, color: BLUE_INK }, { v: five.limit, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(five.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
           footer: resetText(five),
@@ -35,7 +35,7 @@ window.CU = window.CU || {};
         <ul class="legend">
           ${li("dot", BLUE, t("legend.used"), pct(five.used))}
           ${li("tri", BLUE_INK, t("legend.pace5"), pct(five.pace))}
-          ${li("tri", CLAY_INK, t("legend.limit5"), budgetText(five.budget))}
+          ${li("tri", CLAY_INK, t("legend.limit5"), budgetText(five.limit))}
           ${li("sp", "", t("legend.max5"), pct(five.maxRate, 1) + t("unit.perhour"))}
           ${li("sp", "", t("legend.advice5"), pct(five.paceRate, 1) + t("unit.perhour"))}
         </ul>
@@ -46,7 +46,7 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.seven")}</h2>${pill(CU.status(seven.used, seven.pace))}</div>
         ${CU.gauge({
           label: t("card.seven"),
-          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, limit: seven.pace, markers: [{ v: seven.pace, color: CLAY_INK }] }],
+          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, limit: seven.limit, markers: [{ v: seven.pace, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(seven.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
           footer: resetText(seven),
@@ -56,6 +56,7 @@ window.CU = window.CU || {};
           ${li("tri", CLAY_INK, t("legend.pace7"), pct(seven.pace))}
           ${li("sp", "", t("legend.perday"), pct(seven.ratePerDay, 1) + " " + t("unit.perday"))}
           ${li("sp", "", t("legend.sessions"), "≈ " + num(seven.sessionsLeft))}
+          ${li("sp", "", t("legend.today"), pct(seven.todayLeft, 1))}
           ${li("sp", "", t("legend.remaining"), pct(seven.remaining))}
         </ul>
       </section>`;
@@ -69,9 +70,9 @@ window.CU = window.CU || {};
     const svg = CU.gauge({
       label: t("gauge.aria.compact"),
       rings: [
-        { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.pace, markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
-        { r: 92, width: 16, used: five.used, color: BLUE, limit: five.active ? five.budget : null,
-          markers: [{ v: five.pace, color: BLUE_INK, side: "in" }, { v: five.budget, color: CLAY_INK, side: "out" }] },
+        { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.limit, markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
+        { r: 92, width: 16, used: five.used, color: BLUE, limit: five.limit,
+          markers: [{ v: five.pace, color: BLUE_INK, side: "in" }, { v: five.limit, color: CLAY_INK, side: "out" }] },
       ],
       center: [
         { dy: -38, text: t("compact.label.five"), size: 10, fill: "var(--muted)", spacing: "1.2" },
@@ -92,7 +93,7 @@ window.CU = window.CU || {};
         </div>
         <ul class="legend">
           ${li("tri", BLUE_INK, t("compact.legend.pace5"), pct(five.pace))}
-          ${li("tri", CLAY_INK, t("compact.legend.limit5"), budgetText(five.budget))}
+          ${li("tri", CLAY_INK, t("compact.legend.limit5"), budgetText(five.limit))}
           ${li("tri", CLAY_INK, t("compact.legend.pace7"), pct(seven.pace))}
         </ul>
         <div class="stats">
