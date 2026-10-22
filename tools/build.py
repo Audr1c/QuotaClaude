@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the launchers and icons (what `make` calls).   python tools/build.py [all|windows|linux|icons|desktop|clean]
+"""Build the launchers and icons (what `make` calls).   python tools/build.py [help|all|windows|linux|icons|desktop|clean]
 
 Needs `pip install ziglang` (and `pip install pillow` for the icons). Pure Python: works on Windows, Linux, macOS."""
 import shutil
@@ -33,8 +33,28 @@ def desktop():
     print("Menu entry installed: Claude Usage Tracker")
 
 
+HELP = """Claude Usage Tracker - build helper
+
+Builds the tiny launchers (they only start run.bat / run.sh) and the icons.
+Nothing is built until you pick a target:
+
+  make all        build both launchers into bin/        (Windows .exe with icon + Linux binary)
+  make windows    build bin/claude-usage-tracker.exe only
+  make linux      build bin/claude-usage-tracker only
+  make desktop    build the Linux binary and add "Claude Usage Tracker" to your applications menu
+  make icons      regenerate the icons in assets/ and web/ from tools/make_icons.py (needs Pillow)
+  make clean      delete bin/
+
+Requirements: Python 3 and `pip install ziglang` (the compiler, cross-compiles for both systems).
+No make installed (typical on Windows)? Same targets:  python tools/build.py <target>
+"""
+
+
 def main():
-    what = sys.argv[1] if len(sys.argv) > 1 else "all"
+    what = sys.argv[1] if len(sys.argv) > 1 else "help"
+    if what in ("help", "-h", "--help"):
+        print(HELP)
+        return
     if what in ("windows", "all"):
         zig("x86_64-windows-gnu", "claude-usage-tracker.exe", "tools/launcher.c", "assets/app.rc")
     if what in ("linux", "all"):
@@ -46,7 +66,7 @@ def main():
         desktop()
     if what == "clean":
         shutil.rmtree(BIN, ignore_errors=True)
-    if what not in ("all", "windows", "linux", "icons", "desktop", "clean"):
+    if what not in ("help", "all", "windows", "linux", "icons", "desktop", "clean"):
         sys.exit(f"unknown target: {what}")
 
 
