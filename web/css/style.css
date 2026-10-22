@@ -31,9 +31,9 @@ body[data-view="compact"] .wrap { max-width: 640px; }
 /* main content + hours slider on the side */
 .layout { display: flex; gap: 16px; align-items: flex-start; }
 .layout > main { flex: 1; min-width: 0; }
-.hours { width: 92px; flex: none; padding: 14px 10px 12px; text-align: center; position: sticky; top: 16px; }
-.hours h2 { font-size: 14px; line-height: 1.2; }
-.hours-value { display: block; font-family: var(--serif); font-size: 26px; color: var(--clay-ink); margin: 6px 0 2px; }
+.hours { width: 112px; flex: none; padding: 14px 10px 12px; text-align: center; position: sticky; top: 16px; }
+.hours h2 { font-size: 14px; line-height: 1.2; min-height: 34px; }
+.hours-value { display: block; font-family: var(--serif); font-size: 26px; line-height: 34px; height: 34px; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--clay-ink); margin: 6px 0 2px; }
 .slider { position: relative; height: 300px; display: flex; justify-content: center; margin: 6px 0; }
 .slider input {
   -webkit-appearance: none; appearance: none; background: transparent; margin: 0; width: 28px; height: 100%;
