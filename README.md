@@ -14,13 +14,21 @@ Logs your Claude **5-hour** and **7-day** quota (% used + reset times) to a CSV 
 
 ## Quick start
 
-Requirements: Python 3.8+ (standard library only, nothing to install) and Claude Code signed in on the same machine.
+You do not need to build anything: the launchers are already in the repository.
+
+1. Have **Python 3.8+** (standard library only, nothing to install) and **Claude Code signed in** with your Claude subscription on the same machine.
+2. Download the project (**Releases** page, or *Code → Download ZIP*, or `git clone`) and unpack it **as a whole folder**.
+3. Start it:
 
 | OS | Start |
 |---|---|
-| Windows | double-click `run.bat` (or `run.bat` in a terminal) |
-| Linux | `./run.sh` (first time: `chmod +x run.sh`) |
+| Windows | double-click **`bin/claude-usage-tracker.exe`** (or `run.bat`) |
+| Linux | **`bin/claude-usage-tracker`** (or `./run.sh`; after a ZIP download run `chmod +x bin/claude-usage-tracker run.sh` once) |
 | Any | `python run.py` |
+
+> The `.exe` / Linux program is only a launcher: it starts `run.bat` / `run.sh` from the same folder, so it does not work alone. Copy the whole folder, not just the binary.
+
+Your readings are stored in the `data/` folder next to the code (see [Where your data goes](#where-your-data-goes)).
 
 The first launch asks for a language (English / Français), then shows an arrow-key menu with a short explanation under each entry:
 
@@ -65,7 +73,8 @@ The widget also has a browser-tab icon (`web/favicon.svg`). Logo: two rings, ora
 You only need this to rebuild or change them. Requirements: Python 3 and `pip install ziglang` (the Zig compiler packaged for pip; it cross-compiles both programs from any OS, nothing else to install). Icons also need `pip install pillow`.
 
 ```
-make            build both programs into bin/
+make            only explains the targets (nothing is built)
+make all        build both programs into bin/
 make windows    bin/claude-usage-tracker.exe (with the icon, via assets/app.rc)
 make linux      bin/claude-usage-tracker
 make desktop    add "Claude Usage Tracker" to the Linux applications menu

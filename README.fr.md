@@ -65,7 +65,8 @@ Le widget a aussi une icône d'onglet (`web/favicon.svg`). Logo : deux anneaux, 
 Utile seulement pour les reconstruire ou les modifier. Prérequis : Python 3 et `pip install ziglang` (le compilateur Zig empaqueté pour pip ; il compile les deux programmes depuis n'importe quel OS, rien d'autre à installer). Les icônes demandent aussi `pip install pillow`.
 
 ```
-make            compile les deux programmes dans bin/
+make            explique seulement les cibles (rien n'est compilé)
+make all        compile les deux programmes dans bin/
 make windows    bin/claude-usage-tracker.exe (avec l'icône, via assets/app.rc)
 make linux      bin/claude-usage-tracker
 make desktop    ajoute « Claude Usage Tracker » au menu des applications Linux
