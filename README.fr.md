@@ -49,6 +49,33 @@ python run.py tests
 python run.py --lang fr <command>       force la langue
 ```
 
+## Lanceurs et icône
+
+En plus de `run.bat` / `run.sh`, `bin/` contient deux petits programmes déjà compilés qui ne font que démarrer ces scripts dans un terminal (même menu, mêmes arguments) :
+
+| OS | Programme | Icône |
+|---|---|---|
+| Windows | `bin/claude-usage-tracker.exe` (double-clic, ou épingle-le à la barre des tâches) | intégrée au .exe |
+| Linux | `bin/claude-usage-tracker` (binaire statique) + une entrée de menu avec `make desktop` | via l'entrée de menu |
+
+Le widget a aussi une icône d'onglet (`web/favicon.svg`). Logo : deux anneaux, orange = semaine, bleu = fenêtre 5 heures. Le menu du terminal en affiche une version en pixel art.
+
+### Les compiler toi-même (make)
+
+Utile seulement pour les reconstruire ou les modifier. Prérequis : Python 3 et `pip install ziglang` (le compilateur Zig empaqueté pour pip ; il compile les deux programmes depuis n'importe quel OS, rien d'autre à installer). Les icônes demandent aussi `pip install pillow`.
+
+```
+make            compile les deux programmes dans bin/
+make windows    bin/claude-usage-tracker.exe (avec l'icône, via assets/app.rc)
+make linux      bin/claude-usage-tracker
+make desktop    ajoute « Claude Usage Tracker » au menu des applications Linux
+make icons      régénère assets/ et web/favicon.* depuis tools/make_icons.py
+make clean      supprime bin/
+python tools/build.py [windows|linux|all]    pareil sans make (par ex. sous Windows)
+```
+
+Fonctionnement : `tools/launcher.c` cherche `run.bat` (Windows) ou `run.sh` (Linux) à côté de lui (ou un dossier plus haut) et le démarre. `tools/make_icons.py` dessine le logo une seule fois et écrit les fichiers SVG, PNG et ICO. Les binaires fournis ne sont pas signés : Windows SmartScreen peut afficher un avertissement la première fois ; recompile-les depuis les sources si tu préfères.
+
 ## Fonctionnement
 
 - `claude_usage.py` lit ton jeton OAuth Claude Code dans `~/.claude/.credentials.json` (Windows : `%USERPROFILE%\.claude\.credentials.json` ; respecte `CLAUDE_CONFIG_DIR`, ou définis `CLAUDE_USAGE_TOKEN`), interroge l'endpoint d'usage et ajoute une ligne à `data/usage.csv`. Il écrit aussi `data/latest.json` / `latest.js` pour le widget.
@@ -85,7 +112,9 @@ Le widget contient un encart replié **Comment c'est calculé** qui montre chaqu
 ## Structure du projet
 
 ```
-run.py / run.bat / run.sh   entry point (menu)
+run.py / run.bat / run.sh   point d'entrée (menu)
+bin/  tools/  assets/       lanceurs (.exe / Linux), leur source C et scripts de build, icônes
+Makefile                    make all | windows | linux | desktop | icons
 launcher/                   menu code and translations (strings.py)
 claude_usage.py             reads the quota, writes data/
 server.py                   local widget server

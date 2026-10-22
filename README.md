@@ -49,6 +49,33 @@ python run.py tests
 python run.py --lang fr <command>       force the language
 ```
 
+## Launchers and icon
+
+Besides `run.bat` / `run.sh`, `bin/` holds two tiny prebuilt programs that do nothing but start those scripts in a terminal (same menu, same arguments):
+
+| OS | Program | Icon |
+|---|---|---|
+| Windows | `bin/claude-usage-tracker.exe` (double-click, or pin it to the taskbar) | embedded in the .exe |
+| Linux | `bin/claude-usage-tracker` (static binary) + a menu entry with `make desktop` | from the menu entry |
+
+The widget also has a browser-tab icon (`web/favicon.svg`). Logo: two rings, orange = week, blue = 5-hour window. The terminal menu shows a pixel-art version of it.
+
+### Building them yourself (make)
+
+You only need this to rebuild or change them. Requirements: Python 3 and `pip install ziglang` (the Zig compiler packaged for pip; it cross-compiles both programs from any OS, nothing else to install). Icons also need `pip install pillow`.
+
+```
+make            build both programs into bin/
+make windows    bin/claude-usage-tracker.exe (with the icon, via assets/app.rc)
+make linux      bin/claude-usage-tracker
+make desktop    add "Claude Usage Tracker" to the Linux applications menu
+make icons      regenerate assets/ and web/favicon.* from tools/make_icons.py
+make clean      remove bin/
+python tools/build.py [windows|linux|all]    same thing without make (e.g. on Windows)
+```
+
+How it works: `tools/launcher.c` finds `run.bat` (Windows) or `run.sh` (Linux) next to itself (or one folder up) and starts it. `tools/make_icons.py` draws the logo once and writes the SVG, PNG and ICO files. The prebuilt binaries are unsigned, so Windows SmartScreen may warn you the first time; rebuild them from source if you prefer.
+
 ## How it works
 
 - `claude_usage.py` reads your Claude Code OAuth token from `~/.claude/.credentials.json` (Windows: `%USERPROFILE%\.claude\.credentials.json`; honours `CLAUDE_CONFIG_DIR`, or set `CLAUDE_USAGE_TOKEN`), calls the usage endpoint, and appends a row to `data/usage.csv`. It also writes `data/latest.json` / `latest.js` for the widget.
@@ -86,6 +113,8 @@ The widget has a collapsed **How it is computed** panel that shows each equation
 
 ```
 run.py / run.bat / run.sh   entry point (menu)
+bin/  tools/  assets/       launchers (.exe / Linux), their C source and build scripts, icons
+Makefile                    make all | windows | linux | desktop | icons
 launcher/                   menu code and translations (strings.py)
 claude_usage.py             reads the quota, writes data/
 server.py                   local widget server

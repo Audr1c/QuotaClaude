@@ -1,5 +1,5 @@
-# Fins de ligne fixes : les scripts doivent rester executables sur chaque systeme,
-# quel que soit le reglage autocrlf de celui qui clone.
+# Fixed line endings: scripts must stay executable on every system,
+# whatever the cloner's autocrlf setting is.
 * text=auto
 *.sh   text eol=lf
 *.py   text eol=lf
@@ -7,6 +7,14 @@
 *.html text eol=lf
 *.css  text eol=lf
 *.md   text eol=lf
+*.c    text eol=lf
+*.rc   text eol=lf
+*.svg  text eol=lf
+*.in   text eol=lf
+Makefile text eol=lf
 *.bat  text eol=crlf
 *.ps1  text eol=crlf
 *.png  binary
+*.ico  binary
+*.exe  binary
+bin/claude-usage-tracker binary

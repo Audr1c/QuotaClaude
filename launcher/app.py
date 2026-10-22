@@ -20,7 +20,7 @@ from pathlib import Path
 import claude_usage as cu
 from server import DEFAULT_PORT, ping
 
-from . import tui
+from . import banner, tui
 from .strings import LANG_NAMES, LANGS, STRINGS
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -369,6 +369,7 @@ def summary_line(ui: Ui) -> str:
 
 
 def main_menu(ui: Ui) -> Ui:
+    banner.show(ui.t("banner.title"), ui.t("banner.tagline"))
     keys = ["read", "open", "server", "auto", "status", "lang", "tests", "quit"]
     while True:
         # the server entry follows the real state: offers "start" when it is off, "stop" when it is on
