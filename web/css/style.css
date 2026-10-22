@@ -4,20 +4,20 @@
   --track: #E3E0D5; --line: #DEDACF; --tick: #B9B5A9; --hover: #ECE9DF;
   --clay: #D97757; --clay-ink: #B5532F;
   --blue: #6A9BCC; --blue-ink: #3F73A8;
-  --sage: #6B7F52;
+  --sage: #6B7F52; --ok: #6B8F4E; --bad: #C2453B;
   --serif: "Tiempos Text", Georgia, "Times New Roman", serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #262624; --card: #30302E; --text: #F0EEE6; --muted: #A6A39A;
     --track: #44433F; --line: #3D3C38; --tick: #66645E; --hover: #3A3936;
-    --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383;
+    --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383; --ok: #8FB574; --bad: #E4766A;
   }
 }
 :root[data-theme="dark"] {
   --bg: #262624; --card: #30302E; --text: #F0EEE6; --muted: #A6A39A;
   --track: #44433F; --line: #3D3C38; --tick: #66645E; --hover: #3A3936;
-  --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383;
+  --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383; --ok: #8FB574; --bad: #E4766A;
 }
 
 * { box-sizing: border-box; }
@@ -135,3 +135,15 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .err { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--clay); color: var(--clay-ink); font-size: 13px; }
 .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
 .empty code { background: var(--track); padding: 2px 6px; border-radius: 5px; color: var(--text); }
+
+/* ---------- speedometer-style meters under the compact stats ---------- */
+.meter { position: relative; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 4px 0; background: var(--track); }
+.meter .zone { position: absolute; top: 0; bottom: 0; opacity: .28; }
+.meter .zone.ok { left: 0; background: var(--ok); }
+.meter .zone.bad { right: 0; background: var(--bad); }
+.meter .f { position: absolute; top: 0; bottom: 0; left: 0; }
+.meter .f.ok { background: var(--ok); }
+.meter .f.bad { background: var(--bad); }
+.meter u { position: absolute; top: -1px; bottom: -1px; width: 2px; margin-left: -1px; background: var(--text); opacity: .55; }
+.mcap { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.meter.is-over + .mcap { color: var(--bad); }
