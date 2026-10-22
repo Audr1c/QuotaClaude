@@ -2,6 +2,7 @@
 """Build the launchers and icons (what `make` calls).   python tools/build.py [help|all|windows|linux|icons|desktop|clean]
 
 Needs `pip install ziglang` (and `pip install pillow` for the icons). Pure Python: works on Windows, Linux, macOS."""
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -11,7 +12,22 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "bin"
 
 
+def need(module, package, why):
+    """Make sure a pip package is installed: offer to install it, or explain how."""
+    if importlib.util.find_spec(module):
+        return
+    print(f"\nMissing Python package '{package}' ({why}).")
+    answer = "n"
+    if sys.stdin.isatty():
+        answer = input(f"Install it now with:  {sys.executable} -m pip install {package}  ? [Y/n] ").strip().lower() or "y"
+    if answer.startswith("y"):
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+    else:
+        sys.exit(f"Install it yourself, then run this again:\n  {sys.executable} -m pip install {package}")
+
+
 def zig(target, out, *sources):
+    need("ziglang", "ziglang", "the compiler that builds the launchers for Windows and Linux")
     BIN.mkdir(exist_ok=True)
     cmd = [sys.executable, "-m", "ziglang", "cc", "-target", target] + (["-municode"] if "windows" in target else []) \
         + ["-Os", "-s", "-o", str(BIN / out)] + [str(ROOT / s) for s in sources]
@@ -60,6 +76,7 @@ def main():
     if what in ("linux", "all"):
         zig("x86_64-linux-musl", "claude-usage-tracker", "tools/launcher.c")
     if what == "icons":
+        need("PIL", "pillow", "draws the icons")
         subprocess.check_call([sys.executable, str(ROOT / "tools" / "make_icons.py")])
     if what == "desktop":
         zig("x86_64-linux-musl", "claude-usage-tracker", "tools/launcher.c")
