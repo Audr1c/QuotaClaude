@@ -1,0 +1,12 @@
+# Fins de ligne fixes : les scripts doivent rester executables sur chaque systeme,
+# quel que soit le reglage autocrlf de celui qui clone.
+* text=auto
+*.sh   text eol=lf
+*.py   text eol=lf
+*.js   text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.md   text eol=lf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+*.png  binary

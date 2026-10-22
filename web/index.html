@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quota Claude</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    /* Diagnostic : si un script ne charge pas (bloqueur de pub, fichier manquant) ou plante, on l'affiche. */
+    window.addEventListener("error", function (e) {
+      var src = e.target && e.target.src, el = document.getElementById("err");
+      if (!el || (src && src.indexOf("latest.js") !== -1)) return;   // pas encore de donnees : normal
+      el.hidden = false;
+      el.textContent = src
+        ? "Script bloqué ou introuvable : " + src + ". Un bloqueur de pub (uBlock…) ? Désactive-le pour 127.0.0.1."
+        : "Erreur JavaScript : " + e.message + " (" + (e.filename || "") + ":" + (e.lineno || "") + ")";
+    }, true);
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Quota Claude<span>.</span></h1>
+      <div class="tools">
+        <span class="meta" id="meta">—</span>
+        <div class="seg" role="group" aria-label="Présentation">
+          <button type="button" data-view="detail" aria-pressed="true">Détaillé</button>
+          <button type="button" data-view="compact" aria-pressed="false">Compact</button>
+        </div>
+        <button type="button" class="btn" id="refresh" title="Faire un relevé maintenant">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Relever
+        </button>
+      </div>
+    </header>
+    <div id="err" class="err" hidden></div>
+    <main id="app"></main>
+    <footer class="foot" id="foot"></footer>
+  </div>
+
+  <!-- donnees initiales (fonctionne aussi en file://) -->
+  <script src="../data/latest.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/gauge.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# --- Donnees personnelles generees par le tracker : ne jamais les publier ---
+# (historique d'usage, reponse brute de l'API, journaux)
+data/
+
+# --- Secrets ---
+.env
+*.env
+.credentials.json
+*credentials*.json
+*.token
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# --- Editeurs / systemes ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
