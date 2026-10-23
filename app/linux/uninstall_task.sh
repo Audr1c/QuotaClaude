@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Removes the periodic reading: systemd user units and crontab lines marked "# claude-usage-tracker".
-# Called by run.py: bash linux/uninstall_task.sh. The data/ folder is kept.
+# Removes the automatic readings: systemd user units and crontab lines marked "# claude-usage-tracker".
+# Called by run.py: bash linux/uninstall_task.sh (run.py then stops a poller started by cron). The data/ folder is kept.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,6 +12,7 @@ UNIT_DIR="$HOME/.config/systemd/user"
 # systemd: stop and disable, then delete the unit files (errors ignored).
 if systemctl --user show-environment >/dev/null 2>&1; then
     systemctl --user disable --now claude-usage-tracker.timer >/dev/null 2>&1 || true
+    systemctl --user disable --now claude-usage-tracker.service >/dev/null 2>&1 || true
     systemctl --user disable --now claude-usage-server.service >/dev/null 2>&1 || true
 fi
 rm -f "$UNIT_DIR/claude-usage-tracker.service" \

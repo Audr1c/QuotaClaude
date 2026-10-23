@@ -1,8 +1,7 @@
-# Installs the periodic reading as the scheduled task "Claude Usage Tracker".
+# Installs the adaptive poller as the scheduled task "Claude Usage Tracker" (starts at logon, started now).
 # With -WithServer, also installs "Claude Usage Server" (widget server, starts at logon); without it, that task is removed.
-# Called by run.py: powershell -NoProfile -ExecutionPolicy Bypass -File windows\install_task.ps1 -Minutes N [-WithServer] -PythonW "C:\path\pythonw.exe"
+# Called by run.py: powershell -NoProfile -ExecutionPolicy Bypass -File windows\install_task.ps1 [-WithServer] -PythonW "C:\path\pythonw.exe"
 param(
-    [int]$Minutes = 10,
     [switch]$WithServer,
     [string]$PythonW = ""
 )
@@ -10,18 +9,21 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root   = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$script = Join-Path $root "claude_usage.py"
+$poller = Join-Path $root "poller.py"
 $server = Join-Path $root "server.py"
 
-function New-TaskSettings([TimeSpan]$TimeLimit) {
-    New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit $TimeLimit
+function New-TaskSettings {
+    # no time limit; restarted if it ever crashes
+    New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
+}
+
+function Restart-Task([string]$Name) {
+    Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    Start-ScheduledTask -TaskName $Name
 }
 
 try {
-    if ($Minutes -lt 1 -or $Minutes -gt 1439) {
-        throw "Minutes must be between 1 and 1439 (got $Minutes)."
-    }
-
     # Interpreter: -PythonW if it exists, otherwise pythonw.exe from PATH (Microsoft Store alias excluded).
     $interpreter = $null
     if ($PythonW -ne "") {
@@ -40,21 +42,22 @@ try {
     }
     Write-Host "Interpreter: $interpreter"
 
-    # Periodic reading: first run one minute from now, then every $Minutes minutes.
-    $action   = New-ScheduledTaskAction -Execute $interpreter -Argument "`"$script`"" -WorkingDirectory $root
-    $trigger  = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes $Minutes)
-    $settings = New-TaskSettings -TimeLimit (New-TimeSpan -Minutes 2)
-    Register-ScheduledTask -TaskName "Claude Usage Tracker" -Action $action -Trigger $trigger -Settings $settings -Description "Claude quota reading (5 h / 7 d) into $root\data" -Force | Out-Null
+    # Adaptive poller: one long-running process per session (it picks its own timing: 30 s to 10 min).
+    # Replaces the fixed-interval trigger of older versions.
+    $action  = New-ScheduledTaskAction -Execute $interpreter -Argument "`"$poller`"" -WorkingDirectory $root
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    Stop-ScheduledTask -TaskName "Claude Usage Tracker" -ErrorAction SilentlyContinue
+    Register-ScheduledTask -TaskName "Claude Usage Tracker" -Action $action -Trigger $trigger -Settings (New-TaskSettings) -Description "Claude quota readings (5 h / 7 d), adaptive timing, into $root\data" -Force | Out-Null
+    Restart-Task "Claude Usage Tracker"
 
-    Write-Host "Task 'Claude Usage Tracker' installed: one reading every $Minutes minutes."
+    Write-Host "Task 'Claude Usage Tracker' installed: adaptive poller, starts at logon (started now)."
     Write-Host "Log: $root\data\tracker.log"
 
     # Widget server: optional, starts at logon.
     if ($WithServer) {
-        $sAction   = New-ScheduledTaskAction -Execute $interpreter -Argument "`"$server`"" -WorkingDirectory $root
-        $sTrigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-        $sSettings = New-TaskSettings -TimeLimit ([TimeSpan]::Zero)
-        Register-ScheduledTask -TaskName "Claude Usage Server" -Action $sAction -Trigger $sTrigger -Settings $sSettings -Description "Local server for the Claude Usage widget (127.0.0.1)" -Force | Out-Null
+        $sAction  = New-ScheduledTaskAction -Execute $interpreter -Argument "`"$server`"" -WorkingDirectory $root
+        $sTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+        Register-ScheduledTask -TaskName "Claude Usage Server" -Action $sAction -Trigger $sTrigger -Settings (New-TaskSettings) -Description "Local server for the Claude Usage widget (127.0.0.1)" -Force | Out-Null
         Start-ScheduledTask -TaskName "Claude Usage Server"
         Write-Host "Task 'Claude Usage Server' installed: starts at logon (started now)."
     } else {

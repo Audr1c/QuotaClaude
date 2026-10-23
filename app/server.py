@@ -12,6 +12,7 @@ Routes:
     GET  /                   -> redirects to /web/index.html
     GET  /web/...            -> widget files
     GET  /data/latest.json   -> latest state (also latest.js)
+    GET  /data/poller.json   -> state of the adaptive poller (when the next reading is due)
     GET  /api/ping           -> identifies this server (and its process id, so the launcher can stop it)
     POST /api/refresh        -> takes a reading now and returns the new state
 
@@ -88,7 +89,7 @@ class Handler(BaseHTTPRequestHandler):
             query = self.path.split("?", 1)[1] if "?" in self.path else ""
             target = "/web/index.html" + ("?" + query if query else "")
             return self._send(302, b"", "text/plain", {"Location": target})
-        if path in ("/data/latest.json", "/data/latest.js"):
+        if path in ("/data/latest.json", "/data/latest.js", "/data/poller.json"):
             f = cu.DATA_DIR / path.rsplit("/", 1)[1]
         elif path.startswith("/web/"):
             f = (WEB / path[len("/web/"):]).resolve()

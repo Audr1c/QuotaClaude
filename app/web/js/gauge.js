@@ -31,7 +31,7 @@ window.CU = window.CU || {};
 
   // Marker: a tick across the ring + a triangle outside (out) or inside (in) pointing at the ring.
   function marker(m, ring) {
-    if (m.v == null || !isFinite(m.v)) return "";
+    if (m.v == null || !isFinite(m.v) || m.v > 100) return "";
     const v = clamp(m.v), half = ring.width / 2;
     const ang = (START + SWEEP * v / 100) * Math.PI / 180, px = -Math.sin(ang), py = Math.cos(ang);
     const [a, b] = [pt(v, ring.r - half - 4), pt(v, ring.r + half + 4)];

@@ -93,13 +93,6 @@ class CodeIsEnglishTests(unittest.TestCase):
 
 
 class LauncherLogicTests(unittest.TestCase):
-    def test_parse_minutes(self):
-        self.assertEqual(app.parse_minutes(""), app.DEFAULT_MINUTES)
-        self.assertEqual(app.parse_minutes("  5 "), 5)
-        self.assertEqual(app.parse_minutes("1"), 1)
-        for bad in ("0", "-3", "abc", "2.5", str(app.MAX_MINUTES + 1)):
-            self.assertIsNone(app.parse_minutes(bad), bad)
-
     def test_duration_and_percent_formatting(self):
         en, fr = app.Ui("en"), app.Ui("fr")
         self.assertEqual(en.duration(35 * 60), "35 min")

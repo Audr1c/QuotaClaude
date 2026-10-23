@@ -16,7 +16,6 @@ window.CU = window.CU || {};
   const resetText = w => w.active
     ? t("reset.in", { left: CU.fmt.left(w.left), when: CU.fmt.when(w.reset) })
     : t("reset.none");
-  const budgetText = b => b >= 100 ? t("cap") : pct(b);
 
   /* ---------------- detailed view: two cards ---------------- */
   function detail(m) {
@@ -35,7 +34,7 @@ window.CU = window.CU || {};
         <ul class="legend">
           ${li("dot", BLUE, t("legend.used"), pct(five.used))}
           ${li("tri", BLUE_INK, t("legend.pace5"), pct(five.pace))}
-          ${li("tri", CLAY_INK, t("legend.limit5"), budgetText(five.limit))}
+          ${li("tri", CLAY_INK, t("legend.limit5"), pct(five.limit))}
           ${li("sp", "", t("legend.max5"), pct(five.maxRate, 1) + t("unit.perhour"))}
           ${li("sp", "", t("legend.advice5"), pct(five.paceRate, 1) + t("unit.perhour"))}
         </ul>
@@ -93,7 +92,7 @@ window.CU = window.CU || {};
         </div>
         <ul class="legend">
           ${li("tri", BLUE_INK, t("compact.legend.pace5"), pct(five.pace))}
-          ${li("tri", CLAY_INK, t("compact.legend.limit5"), budgetText(five.limit))}
+          ${li("tri", CLAY_INK, t("compact.legend.limit5"), pct(five.limit))}
           ${li("tri", CLAY_INK, t("compact.legend.pace7"), pct(seven.pace))}
         </ul>
         <div class="stats">
@@ -105,6 +104,35 @@ window.CU = window.CU || {};
   }
 
   /* ---------------- per-product breakdown (collapsed by default) ---------------- */
+  /* One segment per day inside each bar. data-labels = the day name from longest to shortest; CU.fitBars keeps
+     the longest one that fits once the bar has its real width. */
+  const esc = x => String(x).replace(/[&<>"|]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "|": "" }[c]));
+  function daySegment(s) {
+    if (s.day === undefined) return `<span class="day" style="flex-grow:1"></span>`;   // no per-day data yet
+    const loc = CU.lang === "fr" ? "fr-FR" : "en-GB", cap = x => x.charAt(0).toUpperCase() + x.slice(1);
+    let labels = [], when = t("breakdown.earlier.title");
+    if (s.day) {
+      const d = new Date(s.day + "T12:00:00");
+      labels = ["long", "short", "narrow"].map(w => cap(d.toLocaleDateString(loc, { weekday: w })));
+      when = cap(d.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "short" }));
+    } else if (s.day === null) {
+      labels = [t("breakdown.earlier"), t("breakdown.earlier.short"), "…"];
+    }
+    const title = when + " · " + t("breakdown.quota", { n: num(s.pts) }) + (s.est ? " · " + t("breakdown.est") : "");
+    return `<span class="day" style="flex-grow:${s.pts}" data-labels="${labels.map(esc).join("|")}" title="${esc(title)}"></span>`;
+  }
+
+  CU.fitBars = function (root) {
+    const ctx = (CU.fitBars.ctx = CU.fitBars.ctx || document.createElement("canvas").getContext("2d"));
+    root.querySelectorAll(".bars .day").forEach(el => {
+      const labels = (el.dataset.labels || "").split("|").filter(Boolean);
+      if (!labels.length) return;
+      ctx.font = getComputedStyle(el).font;
+      const room = el.clientWidth - 6;
+      el.textContent = labels.find(l => ctx.measureText(l).width <= room) || "";
+    });
+  };
+
   CU.breakdown = function (m, open) {
     const rows = m.breakdown.filter(r => r.share > 0).sort((a, b) => b.share - a.share);
     if (!rows.length) return "";
@@ -117,12 +145,12 @@ window.CU = window.CU || {};
           ${rows.map(r => `
             <li>
               <span class="name">${r.name}</span>
-              <span class="bar"><span style="width:${(r.share / max * 100).toFixed(1)}%"></span></span>
+              <span class="bar"><span class="fill" style="width:${(r.share / max * 100).toFixed(1)}%">${(r.days.length ? r.days : [{ pts: 1 }]).map(daySegment).join("")}</span></span>
               <b>${pct(r.share)}</b>
               <span class="q">${t("breakdown.quota", { n: num(r.quota) })}</span>
             </li>`).join("")}
         </ul>
-        <p class="note">${t("breakdown.note", { pct: pct(m.seven.used) })}</p>
+        <p class="note">${t("breakdown.note", { pct: pct(m.seven.used) })} ${t("breakdown.days")}</p>
       </details>`;
   };
 

@@ -35,13 +35,15 @@ The first launch asks for a language (English / Français), then shows an arrow-
 - **Take a reading now** – one manual reading, saved to the CSV.
 - **Open the widget** – starts the local server and opens the gauges in your browser.
 - **Start / Stop the widget server** – the entry follows the real state: it offers "Start" when the server is off and "Stop" when it is running.
-- **Automatic readings** – install, change or remove the background task. Default: every **10 minutes**; pick a preset or type any number of minutes. Optionally also start the widget server at login/boot. Or skip it entirely and refresh by hand (button in the widget, or the menu).
-- **Status** – last reading, scheduler state, server state.
+- **Automatic readings** – install or remove the background poller, which takes readings by itself, faster while your quota is moving and slower when it is not (see [How it works](#how-it-works)). No interval to choose. Optionally also start the widget server at login/boot. Or skip it entirely and refresh by hand (button in the widget, or the menu).
+- **Status** – last reading, poller state (with the time of the next reading), server state.
 - **Run tests**, **Language**, **Quit**.
 
 ### The widget
 
-Gauges for the 5-hour window and the week, a compact/detailed switch, a collapsed per-product breakdown, and an **hours-per-day slider** on the side (1–24 h, long marks every 5 h): tell it how many hours a day you really use Claude and the weekly pace counts those working hours (from your first request of the day, 08:00 by default) and the advised hourly pace is computed over them. A collapsed panel lists every equation (see below).
+Gauges for the 5-hour window and the week, a compact/detailed switch, a collapsed per-product **Weekly breakdown** (each bar is split by day, see below), and an **hours-per-day slider** on the side (1–24 h, long marks every 5 h): tell it how many hours a day you really use Claude and the weekly pace counts those working hours (from your first request of the day, 08:00 by default) and the advised hourly pace is computed over them. A collapsed panel lists every equation (see below). The header shows when the next automatic reading is due ("next in …").
+
+In the breakdown, each product's bar has one segment per local day, all in the same colour with thin separators, and the day name written inside (full name, then shorter abbreviations, then one letter, then nothing, depending on the room). Hover a segment for its date and points. Days before the first readings of the week form a single "Earlier" segment. Some segments are estimated (their tooltip says so): before the product split was first recorded the mix is assumed constant, and between two records the split follows the week's % from `usage.csv`.
 
 ### Command-line shortcuts
 
@@ -51,8 +53,8 @@ python app/run.py start                     start the widget server (background,
 python app/run.py open                      start the server if needed and open the widget
 python app/run.py stop                      stop the server
 python app/run.py status
-python app/run.py install --minutes 10 [--with-server]
-python app/run.py uninstall
+python app/run.py install [--with-server]   start the background poller at logon (and now)
+python app/run.py uninstall                 remove it (also stops a running poller)
 python app/run.py tests
 python app/run.py --lang fr <command>       force the language
 ```
@@ -92,20 +94,24 @@ Everything stays in the `app/data/` folder next to the code (git-ignored, create
 | File | What |
 |---|---|
 | `usage.csv` | one line per reading: time, 5-hour %, week %, reset times |
-| `latest.json` / `latest.js` | latest state + recent history, read by the widget |
+| `latest.json` / `latest.js` | latest state + recent history (only readings where values changed, plus the last one), read by the widget |
+| `breakdown.csv` | per-product weekly shares, one line per product each time they change; used to split the breakdown bars by day |
+| `poller.json` | poller state: time of the next reading, current step |
+| `poller.lock` | lock so that only one poller runs at a time |
 | `last_response.json` | raw API answer of the last reading (debugging) |
 | `tracker.log` | log of the background readings (status, Retry-After, failures in a row) |
 | `errors.json` | the last 30 failed readings with full detail; the widget's red banner opens it (**Details**) |
 | `config.json` | your menu language |
 | `server.log` | widget server output (Linux) |
 
-Outside `app/data/`: the scheduled task if you set one up (Windows Task Scheduler, or a systemd user timer / crontab line on Linux; the menu removes it), and Python's `__pycache__` folders. The Claude Code credentials file is only **read**, never copied. A reading needs Claude Code signed in; otherwise the menu tells you the credentials were not found.
+Outside `app/data/`: the scheduled task if you set one up (Windows Task Scheduler, or a systemd user service / crontab line on Linux; the menu removes it), and Python's `__pycache__` folders. The Claude Code credentials file is only **read**, never copied. A reading needs Claude Code signed in; otherwise the menu tells you the credentials were not found.
 
 ## How it works
 
 - `claude_usage.py` reads your Claude Code OAuth token from `~/.claude/.credentials.json` (Windows: `%USERPROFILE%\.claude\.credentials.json`; honours `CLAUDE_CONFIG_DIR`, or set `CLAUDE_USAGE_TOKEN`), calls the usage endpoint, and appends a row to `data/usage.csv`. It also writes `data/latest.json` / `latest.js` for the widget.
 - `server.py` serves the widget on `http://127.0.0.1:8765` (local only; Host/Origin checks against DNS rebinding) and lets the **Refresh** button trigger a reading.
-- Scheduling: Windows Task Scheduler, or a systemd user timer on Linux (cron fallback).
+- `poller.py` is the adaptive poller behind the automatic readings: a long-running loop, not a fixed interval. After a reading where the 5-hour or weekly % changed, the next one comes 30 s later; each reading without change climbs one step (1 min, 3 min, 5 min, 7 min, then 10 min, where it stays). After an HTTP 429 (rate limited) it waits 2 min, or the API's `Retry-After` if longer, without moving on the ladder. Other errors count as "no change". Only one poller runs at a time.
+- Background start: on Windows the "Claude Usage Tracker" scheduled task starts the poller at logon (and right at install) and restarts it if it crashes; on Linux it is the systemd user service `claude-usage-tracker.service` (`Restart=on-failure`), or an `@reboot` crontab line without systemd (the poller is then started immediately).
 - The widget also works opened as a plain file (`app/web/index.html`) but then cannot refresh by itself.
 
 The weekly-vs-5-hour ratio shown in the widget is estimated from your own consecutive readings (10 % until enough data exists).
@@ -125,11 +131,11 @@ The widget has a collapsed **How it is computed** panel that shows each equation
 | **Daily budget** *B* ("possible spend / day") | `(100 − u0) / D` |
 | Weekly limit now, *L7* (green/red boundary of the week ring) | `u0 + B` |
 | Left in today's budget | `max(0, L7 − u7)` |
-| 5-hour limit, *L5* (orange marker and green/red boundary of the 5-hour ring) | `u5 + (L7 − u7) × 100 / r`, capped at 100 |
+| 5-hour limit, *L5* (orange marker and green/red boundary of the 5-hour ring) | `u5 + (L7 − u7) × 100 / r` (may exceed 100 % when today's budget covers more than one 5-hour window) |
 | **Advised per hour** (5-hour %/h) | `B / h × 100 / r` |
 | Max possible until reset | `(100 − u5) / hours left in the window` |
 | Full 5-hour windows left | `(100 − u7) / r` |
-| Per-product breakdown | `product share × u7 / 100` points of the weekly quota |
+| Per-product breakdown | `product share × u7 / 100` points of the weekly quota, split per day from the shares recorded in `breakdown.csv` and the week's % over time |
 | "Ahead / margin" pill | `used − pace`; beyond ±5 points it reads ahead / margin |
 
 **What the slider changes:** the weekly pace (working hours instead of calendar time) and the advised hourly pace. The 5-hour pace is real time, and the green/red zones come from the daily budget, which does not depend on the slider.
@@ -144,6 +150,7 @@ app/                        everything else
   run.py  run.bat  run.sh   entry point (menu)
   launcher/                 menu code and translations (strings.py)
   claude_usage.py           reads the quota, writes data/
+  poller.py                 adaptive poller (background readings)
   server.py                 local widget server
   web/                      the widget (HTML, CSS, JS; EN/FR)
   windows/  linux/          scheduler install/uninstall scripts
@@ -162,6 +169,7 @@ app/                        everything else
 
 - macOS: the scripts are plain Python/shell and may work, but the scheduler setup is untested (use cron manually).
 - If you set up automatic readings with an older layout (before the `app/` folder existed), open the menu and redo **Automatic readings** once: the old task points to the old location.
+- If you installed automatic readings with v1.0.0 (fixed interval), open the menu and redo **Automatic readings** once to switch to the poller.
 - Not affiliated with Anthropic.
 
 ## Licence

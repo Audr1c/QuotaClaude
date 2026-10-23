@@ -90,7 +90,8 @@ window.CU = window.CU || {};
 
     const five = win(D.five_hour, FIVE_H, now);
     // today's remaining budget expressed in % of a 5-hour window: the 5-hour usage you can reach and still be on budget
-    five.limit = five.active && seven.limit != null ? Math.min(100, five.used + seven.todayLeft * 100 / ratio) : null;
+    // (not capped: exceeds 100 when today's budget is worth more than one window)
+    five.limit = five.active && seven.limit != null ? five.used + seven.todayLeft * 100 / ratio : null;
     five.maxRate = (100 - five.used) / (five.left / H);      // 5h-% per hour to end exactly at the reset
     five.paceRate = seven.ratePerHour * 100 / ratio;          // 5h-% per hour at the weekly pace
 
@@ -109,7 +110,7 @@ window.CU = window.CU || {};
       history: D.history || [],
       // per-product breakdown: share of what was used, and the equivalent in points of the weekly quota
       breakdown: D.breakdown && D.breakdown.rows
-        ? D.breakdown.rows.map(r => ({ name: r.name, share: r.pct || 0, quota: (r.pct || 0) * seven.used / 100 }))
+        ? D.breakdown.rows.map(r => ({ name: r.name, share: r.pct || 0, quota: (r.pct || 0) * seven.used / 100, days: r.days || [] }))
         : [],
     };
   };

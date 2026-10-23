@@ -93,6 +93,32 @@ class OfflineTests(unittest.TestCase):
         self.assertEqual([r["pct"] for r in st["breakdown"]["rows"]], [28.0, 72.0])
         self.assertEqual(st["breakdown"]["rows"][0]["name"], "Claude Code")
 
+    def test_breakdown_split_by_local_day(self):
+        def p(d7, shares):
+            out = payload(5.0, d7)
+            if shares:
+                out["seven_day_breakdown"] = {"rows": [{"key": k, "display_name": k, "percent": v} for k, v in shares.items()]}
+            return out
+        local = lambda day, hour: datetime(2026, 10, day, hour, 0).astimezone()
+        cu.run(self.dir, p(10.0, {"code": 100, "chat": 0}), local(21, 12))
+        cu.run(self.dir, p(16.0, None), local(21, 20))            # week % known at 20:00, products not
+        _, _, st = cu.run(self.dir, p(20.0, {"code": 50, "chat": 50}), local(22, 12))
+        days = {r["key"]: r["days"] for r in st["breakdown"]["rows"]}
+        # chat: 0 -> 10 pts between the two records; 60 % of the week's rise happened before midnight
+        self.assertEqual(days["chat"], [{"day": "2026-10-21", "pts": 6.0, "est": False},
+                                        {"day": "2026-10-22", "pts": 4.0, "est": False}])
+        # code: its 10 pts were all used before the first record, in one segment (exact total, days unknown)
+        self.assertEqual([(s["pts"], s["est"]) for s in days["code"]], [(10.0, False)])
+        lines = (self.dir / "breakdown.csv").read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(len(lines), 1 + 4)                       # header + 2 products x 2 records
+        cu.run(self.dir, p(20.0, {"code": 50, "chat": 50}), local(22, 13))
+        self.assertEqual(len((self.dir / "breakdown.csv").read_text(encoding="utf-8").strip().splitlines()), 5)  # unchanged: not recorded
+
+    def test_history_drops_repeated_values(self):
+        for i, v in enumerate((10.0, 10.0, 10.0, 12.0, 12.0)):
+            cu.run(self.dir, payload(v, 30.0), T0 + timedelta(minutes=i))
+        self.assertEqual([h["h5"] for h in self.read_js_state()["history"]], [10.0, 12.0, 12.0])
+
     def test_window_without_reset(self):
         row, err, _ = cu.run(self.dir, {"five_hour": {"utilization": 0, "resets_at": None},
                                          "seven_day": {"utilization": 3, "resets_at": R7}}, T0)
@@ -142,6 +168,35 @@ class DiagnosticTests(unittest.TestCase):
             dd = Path(d)
             cu.record_diagnostic(dd, cu.now_utc(), cu.TrackerError("http", "boom", {"status": 500}))
             self.assertEqual(cu.record_diagnostic(dd, cu.now_utc(), None)["consecutive"], 0)
+
+
+class PollerTests(unittest.TestCase):
+    def test_ladder(self):
+        import poller
+        top = len(poller.LADDER_S) - 1
+        self.assertEqual(poller.next_delay(top, True, None)[:2], (30, 0))          # a change: 30 s
+        delays, step = [], 0
+        for _ in range(7):                                                         # then no change: climb, stay at 10 min
+            d, step, reason = poller.next_delay(step, False, None)
+            delays.append(d)
+        self.assertEqual(delays, [60, 180, 300, 420, 600, 600, 600])
+        self.assertEqual(reason, "unchanged")
+
+    def test_rate_limited_waits_two_minutes_or_retry_after(self):
+        import poller
+        self.assertEqual(poller.next_delay(2, False, "rate_limited"), (120, 2, "rate_limited"))
+        self.assertEqual(poller.next_delay(2, False, "rate_limited", "300")[0], 300)
+        self.assertEqual(poller.next_delay(2, False, "network")[:2], (300, 3))      # other errors: like no change
+
+    def test_single_instance(self):
+        import poller
+        with tempfile.TemporaryDirectory() as d:
+            lock = poller.acquire_lock(Path(d))
+            self.assertIsNotNone(lock)
+            poller.write_state(Path(d), pid=123)
+            self.assertEqual(poller.running(Path(d)), {"pid": 123})
+            lock.close()
+            self.assertIsNone(poller.running(Path(d)))
 
 
 class ServerTests(unittest.TestCase):

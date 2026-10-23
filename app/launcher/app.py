@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import claude_usage as cu
+import poller
 from server import DEFAULT_PORT, ping
 
 from . import banner, tui
@@ -26,8 +27,6 @@ from .strings import LANG_NAMES, LANGS, STRINGS
 ROOT = Path(__file__).resolve().parent.parent
 DATA = cu.DATA_DIR
 CONFIG_FILE = DATA / "config.json"
-DEFAULT_MINUTES = 10
-MAX_MINUTES = 1439
 TASK_NAME = "Claude Usage Tracker"
 CRON_MARKER = "# claude-usage-tracker"
 IS_WINDOWS = os.name == "nt"
@@ -184,7 +183,7 @@ def scheduler_kind() -> str | None:
             r = subprocess.run(["schtasks", "/Query", "/TN", TASK_NAME], capture_output=True, timeout=20)
             return "task" if r.returncode == 0 else None
         if IS_LINUX:
-            r = subprocess.run(["systemctl", "--user", "is-enabled", "claude-usage-tracker.timer"],
+            r = subprocess.run(["systemctl", "--user", "is-enabled", "claude-usage-tracker.service"],
                                capture_output=True, timeout=10)
             if r.returncode == 0:
                 return "systemd"
@@ -201,7 +200,6 @@ def status(ui: Ui) -> bool:
     label = {"reading": ui.t("status.reading"), "samples": ui.t("status.samples"),
              "server": ui.t("status.server"), "auto": ui.t("status.auto")}
     width = max(len(v) for v in label.values())
-    cfg = load_config()
 
     def line(key: str, value: str) -> None:
         print(f"  {label[key]:<{width}} : {value}")
@@ -221,11 +219,17 @@ def status(ui: Ui) -> bool:
     line("server", ui.t("status.server.on", url=f"http://127.0.0.1:{DEFAULT_PORT}/") if info else ui.t("status.server.off"))
 
     kind = scheduler_kind()
-    if kind:
-        minutes = cfg.get("interval_minutes")
-        name = ui.t(f"kind.{kind}")
-        line("auto", ui.t("status.auto.on.interval", kind=name, n=minutes) if minutes else ui.t("status.auto.on", kind=name))
-        if age is not None and minutes and age > 3 * 60 * int(minutes) + 120:
+    info = poller.running()
+    if kind or info is not None:
+        name = ui.t(f"kind.{kind}") if kind else ui.t("kind.manual")
+        due = cu.parse_dt((info or {}).get("next_at"))
+        if info is None:
+            line("auto", ui.t("status.auto.stopped", kind=name))
+        elif due:
+            line("auto", ui.t("status.auto.next", kind=name, left=ui.duration(max(0.0, (due - cu.now_utc()).total_seconds()))))
+        else:
+            line("auto", ui.t("status.auto.on", kind=name))
+        if age is not None and info is not None and age > 3 * max(poller.LADDER_S) + 120:
             print(f"  ! {ui.t('status.stale', ago=ui.duration(age))}")
     else:
         line("auto", ui.t("status.auto.off"))
@@ -239,15 +243,15 @@ def load_state() -> dict | None:
         return None
 
 
-def install_task(ui: Ui, minutes: int, with_server: bool) -> bool:
+def install_task(ui: Ui, with_server: bool) -> bool:
     if IS_WINDOWS:
         cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "windows" / "install_task.ps1"),
-               "-Minutes", str(minutes), "-PythonW", background_python()]
+               "-PythonW", background_python()]
         if with_server:
             cmd.append("-WithServer")
         env = None
     elif IS_LINUX:
-        cmd = ["bash", str(ROOT / "linux" / "install_task.sh"), str(minutes)] + (["--with-server"] if with_server else [])
+        cmd = ["bash", str(ROOT / "linux" / "install_task.sh")] + (["--with-server"] if with_server else [])
         env = dict(os.environ, PYTHON=sys.executable)
     else:
         ui.say("install.unsupported")
@@ -258,11 +262,11 @@ def install_task(ui: Ui, minutes: int, with_server: bool) -> bool:
         ui.say("install.fail", code=code)
         return False
     cfg = load_config()
-    cfg.update(interval_minutes=minutes, server_at_login=with_server)
+    cfg.pop("interval_minutes", None)                 # fixed interval of older versions
+    cfg.update(server_at_login=with_server)
     save_config(cfg)
-    ui.say("install.ok", n=minutes)
+    ui.say("install.ok")
     ui.say("install.first")
-    read_now(ui)
     return True
 
 
@@ -278,6 +282,7 @@ def remove_task(ui: Ui) -> bool:
     if code != 0:
         ui.say("remove.fail", code=code)
         return False
+    poller.stop()                                     # one started by cron or by hand is not stopped by the scripts
     cfg = load_config()
     cfg.pop("interval_minutes", None)
     cfg.pop("server_at_login", None)
@@ -292,16 +297,6 @@ def run_tests(ui: Ui) -> bool:
                           cwd=str(ROOT)).returncode
     ui.say("tests.ok" if code == 0 else "tests.fail", code=code)
     return code == 0
-
-
-def parse_minutes(text: str) -> int | None:
-    """'' -> default; a whole number within range -> that number; anything else -> None."""
-    text = text.strip()
-    if not text:
-        return DEFAULT_MINUTES
-    if text.isdigit() and 1 <= int(text) <= MAX_MINUTES:
-        return int(text)
-    return None
 
 
 # --------------------------------------------------------------------------- menus
@@ -325,27 +320,17 @@ def install_flow(ui: Ui) -> None:
         return
     print()
     print(ui.t("install.intro.windows" if IS_WINDOWS else "install.intro.linux"))
-    print(ui.t("install.interval.tip", default=DEFAULT_MINUTES))
-    previous = load_config().get("interval_minutes")
-    default = previous or DEFAULT_MINUTES
-    while True:
-        raw = tui.ask(ui.t("install.interval.ask", default=default), str(default))
-        minutes = parse_minutes(raw)
-        if minutes is not None:
-            if minutes < 5:
-                ui.say("install.interval.short")
-            break
-        ui.say("install.interval.bad")
+    print(ui.t("install.timing"))
     with_server = ask_yes_no(ui, ui.t("install.server.title"),
                              (ui.t("install.server.yes"), ui.t("install.server.yes.desc")),
                              (ui.t("install.server.no"), ui.t("install.server.no.desc")))
     if with_server is None:
         return
-    install_task(ui, minutes, with_server)
+    install_task(ui, with_server)
 
 
 def auto_menu(ui: Ui) -> None:
-    options = [(ui.t("auto.install"), ui.t("auto.install.desc", default=DEFAULT_MINUTES)),
+    options = [(ui.t("auto.install"), ui.t("auto.install.desc")),
                (ui.t("auto.remove"), ui.t("auto.remove.desc")),
                (ui.t("auto.back"), ui.t("auto.back.desc"))]
     choice = tui.choose(ui.t("auto.title"), options, hint=ui.t("menu.hint.back"), plain_hint=ui.t("plain.hint"))
@@ -429,8 +414,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stop", help="stop the widget server")
     sub.add_parser("status", help="show the latest reading and what is set up")
     sub.add_parser("tests", help="run the project's tests")
-    inst = sub.add_parser("install", help="set up automatic readings in the background")
-    inst.add_argument("--minutes", type=int, default=DEFAULT_MINUTES, help=f"minutes between readings (default {DEFAULT_MINUTES})")
+    inst = sub.add_parser("install", help="set up automatic readings in the background (adaptive timing, 30 s to 10 min)")
     inst.add_argument("--with-server", action="store_true", help="also start the widget server at login")
     sub.add_parser("uninstall", help="remove automatic readings (your data is kept)")
     return p
@@ -471,11 +455,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "tests":
             return 0 if run_tests(ui) else 1
         if args.cmd == "install":
-            minutes = parse_minutes(str(args.minutes))
-            if minutes is None:
-                ui.say("install.interval.bad")
-                return 2
-            return 0 if install_task(ui, minutes, args.with_server) else 1
+            return 0 if install_task(ui, args.with_server) else 1
         if args.cmd == "uninstall":
             return 0 if remove_task(ui) else 1
     except KeyboardInterrupt:

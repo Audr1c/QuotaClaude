@@ -27,17 +27,17 @@
   $("app").addEventListener("toggle", e => {
     const isFormulas = e.target.classList.contains("formulas");
     if (!isFormulas && !e.target.classList.contains("breakdown")) return;
-    if (isFormulas) formulasOpen = e.target.open; else breakdownOpen = e.target.open;
+    if (isFormulas) formulasOpen = e.target.open; else { breakdownOpen = e.target.open; CU.fitBars(e.target); }
     try { localStorage.setItem(isFormulas ? FORMULAS_KEY : BREAKDOWN_KEY, e.target.open ? "1" : "0"); } catch (err) { /* ignore */ }
   }, true);
 
   /* ---------- data ---------- */
+  let pollerState = null;                      // data/poller.json: when the background poller reads next
   function loadData() {
     if (SERVED) {
-      return fetch("../data/latest.json", { cache: "no-store" })
-        .then(r => (r.ok ? r.json() : null))
-        .then(d => { if (d) window.CLAUDE_USAGE = d; })
-        .catch(() => {});
+      const json = url => fetch(url, { cache: "no-store" }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+      return Promise.all([json("../data/latest.json"), json("../data/poller.json")])
+        .then(([d, p]) => { if (d) window.CLAUDE_USAGE = d; pollerState = p; });
     }
     return new Promise(resolve => {            // file://: fetch is blocked, reload a <script> instead
       const s = document.createElement("script");
@@ -82,8 +82,11 @@
       return;
     }
     $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.formulas(m, formulasOpen);
+    CU.fitBars($("app"));
 
-    $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) : "—";
+    const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
+    const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";
+    $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) + next : "—";
     $("meta").classList.toggle("stale", m.age > 30 * 60e3);
     err.hidden = !m.error;
     if (m.error) err.innerHTML = errorHtml(m.errorCode, m.error, m.diagnostics);
@@ -156,10 +159,12 @@
     }
   });
 
+  let resizeTimer = null;                          // day names in the breakdown bars depend on their width
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => CU.fitBars($("app")), 100); });
+
   /* ---------- start ---------- */
   setView(view);
   applyLanguage();
   loadData().then(render);
-  setInterval(() => loadData().then(render), 60e3);   // new data (scheduled task)
-  setInterval(render, 15e3);                           // countdowns and time-based markers
+  setInterval(() => loadData().then(render), 10e3);   // new data (the poller can read every 30 s) and countdowns
 })(window.CU);

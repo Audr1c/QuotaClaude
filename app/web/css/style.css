@@ -111,7 +111,7 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .stats b { display: block; font-family: var(--serif); font-weight: 400; font-size: 20px; font-variant-numeric: tabular-nums; }
 .stats span { color: var(--muted); font-size: 12px; }
 
-/* ---------- per-product breakdown ---------- */
+/* ---------- per-product breakdown (each bar split by day) ---------- */
 .breakdown { margin-top: 16px; padding-top: 14px; padding-bottom: 14px; }
 .breakdown summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
 .breakdown summary::-webkit-details-marker { display: none; }
@@ -124,8 +124,13 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .breakdown .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
 .bars { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 9px; }
 .bars li { display: grid; grid-template-columns: 90px 1fr 44px; align-items: center; gap: 4px 10px; font-size: 13px; }
-.bars .bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
-.bars .bar span { display: block; height: 100%; border-radius: 4px; background: var(--clay); }
+.bars .bar { height: 18px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.bars .fill { display: flex; height: 100%; border-radius: 5px; overflow: hidden; }
+.bars .day {
+  flex: 1 1 0; min-width: 0; height: 100%; background: var(--clay); overflow: hidden; white-space: nowrap; text-align: center;
+  font: 400 10.5px/18px ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace; letter-spacing: .02em; color: rgba(255, 255, 255, .78);
+}
+.bars .day + .day { box-shadow: inset 2px 0 0 var(--card); padding-left: 2px; }
 .bars b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .bars .q { grid-column: 2 / 4; color: var(--muted); font-size: 12px; margin-top: -4px; }
 .breakdown .note { margin: 12px 0 0; color: var(--muted); font-size: 12px; }

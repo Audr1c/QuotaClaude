@@ -7,6 +7,7 @@ Claude Usage Tracker: takes one reading of your Claude quota (5-hour and 7-day w
 
 Each reading writes, inside data/:
   - usage.csv           one line appended (full history)
+  - breakdown.csv       per-product weekly shares, one line per product, when they change
   - latest.json         latest state + recent history + estimated 5h->week ratio
   - latest.js           same content, loadable by web/index.html even when opened as a file
   - last_response.json  raw API response (for debugging)
@@ -261,6 +262,132 @@ def extract_breakdown(payload: dict) -> dict | None:
     return {"as_of": b.get("as_of"), "rows": rows}
 
 
+BREAKDOWN_FIELDS = ["timestamp", "seven_day_pct", "seven_day_resets_at", "key", "name", "pct"]
+
+
+def load_breakdown_history(path: Path) -> list[dict]:
+    """breakdown.csv grouped by reading: [{t, d7, reset, shares: {key: pct}}], oldest first."""
+    if not path.exists():
+        return []
+    snaps: dict[str, dict] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            t = parse_dt(r.get("timestamp"))
+            if not t or num(r.get("pct")) is None:
+                continue
+            s = snaps.setdefault(r["timestamp"], {"t": t, "d7": num(r.get("seven_day_pct")),
+                                                  "reset": parse_dt(r.get("seven_day_resets_at")), "shares": {}})
+            s["shares"][r["key"]] = num(r["pct"])
+    return sorted(snaps.values(), key=lambda s: s["t"])
+
+
+def append_breakdown(path: Path, row: dict, breakdown: dict) -> None:
+    """Record the per-product shares of this reading, unless nothing changed since the last record of this window."""
+    d7, reset = num(row.get("seven_day_pct")), parse_dt(row.get("seven_day_resets_at"))
+    shares = {r["key"]: r["pct"] for r in breakdown["rows"] if r.get("key") and r.get("pct") is not None}
+    if d7 is None or not shares:
+        return
+    hist = load_breakdown_history(path)
+    if hist and hist[-1]["d7"] == d7 and hist[-1]["shares"] == shares and _same(hist[-1]["reset"], reset):
+        return
+    new = not path.exists()
+    with path.open("a", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=BREAKDOWN_FIELDS)
+        if new:
+            w.writeheader()
+        for r in breakdown["rows"]:
+            if r.get("key") in shares:
+                w.writerow({"timestamp": row["timestamp"], "seven_day_pct": row["seven_day_pct"],
+                            "seven_day_resets_at": row["seven_day_resets_at"], "key": r["key"],
+                            "name": r.get("name") or r["key"], "pct": f"{r['pct']:g}"})
+
+
+def _local_midnights(start: datetime, end: datetime) -> list[datetime]:
+    """Local midnights strictly between start and end (as UTC datetimes)."""
+    out, day = [], start.astimezone().date()
+    while True:
+        day += timedelta(days=1)
+        m = datetime(day.year, day.month, day.day).astimezone().astimezone(timezone.utc)
+        if m >= end:
+            return out
+        if m > start:
+            out.append(m)
+
+
+def daily_breakdown(snaps: list[dict], rows: list[dict], now: datetime) -> dict:
+    """
+    Split each product's weekly usage by local day: {key: [{"day": "YYYY-MM-DD" or None, "pts", "est"}]}.
+
+    pts = points of the weekly quota used by that product that day. A product's cumulative quota at a
+    recorded reading is share x week used / 100; at a midnight between two records it is interpolated on
+    the week's % (from usage.csv), so each day gets the usage that happened in it. Before the first record
+    of the week the product mix is assumed constant ("est": estimated). Days before the first reading of
+    the week cannot be told apart: they form one segment with "day": None ("earlier").
+    """
+    if not snaps or not snaps[-1]["reset"]:
+        return {}
+    reset = snaps[-1]["reset"]
+    start = reset - timedelta(days=7)
+    snaps = [s for s in snaps if _same(s["reset"], reset) and s["d7"] is not None and s["t"] >= start]
+    if not snaps:
+        return {}
+    usage = [(parse_dt(r["timestamp"]), num(r.get("seven_day_pct"))) for r in rows
+             if _same(parse_dt(r.get("seven_day_resets_at")), reset) and num(r.get("seven_day_pct")) is not None]
+    usage = [(t, v) for t, v in usage if t >= start]
+    end = min(now, snaps[-1]["t"])
+    first_usage = usage[0][0] if usage else snaps[0]["t"]
+    bounds = sorted({start, end, *_local_midnights(start, end), *([first_usage] if start < first_usage < end else [])})
+    origin = {"t": start, "d7": 0.0, "shares": {}}             # nothing is used when the week starts
+
+    def d7_at(b: datetime) -> float | None:
+        v = None
+        for t, x in usage:
+            if t > b:
+                break
+            v = x
+        return v
+
+    def quota(snap: dict, key: str) -> float:
+        return (snap["shares"].get(key) or 0.0) * snap["d7"] / 100.0
+
+    out: dict[str, list] = {}
+    for key in snaps[-1]["shares"]:
+        points = []                                             # (time, cumulative quota or None, estimated)
+        for b in bounds:
+            before = origin
+            for s in snaps:
+                if s["t"] <= b:
+                    before = s
+            after = next((s for s in snaps if s["t"] > b), None)
+            if b == start:
+                q, est = 0.0, False
+            elif after is None:
+                q, est = quota(before, key), False
+            else:
+                d = d7_at(b)
+                if d is None:
+                    q, est = None, True
+                else:
+                    span = after["d7"] - before["d7"]
+                    frac = min(1.0, max(0.0, (d - before["d7"]) / span)) if span > 0 else 0.0
+                    qb = quota(before, key)
+                    q, est = qb + frac * (quota(after, key) - qb), before is origin
+            points.append((b, q, est))
+        points = [p for p in points if p[1] is not None]        # an unknown midnight merges the days around it
+        segs = []
+        for (a, qa, ea), (b, qb, eb) in zip(points, points[1:]):
+            one_day = a.astimezone().date() == (b - timedelta(seconds=1)).astimezone().date()
+            day = a.astimezone().date().isoformat() if one_day else None
+            pts = max(0.0, qb - qa)
+            if segs and day is not None and segs[-1]["day"] == day:
+                segs[-1]["pts"] += pts
+                segs[-1]["est"] = segs[-1]["est"] or ea or eb
+            else:
+                segs.append({"day": day, "pts": pts, "est": ea or eb})
+        out[key] = [dict(g, pts=round(g["pts"], 2)) for g in segs if g["pts"] >= 0.01]
+    return out
+
+
 def previous_breakdown(data_dir: Path) -> dict | None:
     try:
         return json.loads((data_dir / "latest.json").read_text(encoding="utf-8")).get("breakdown")
@@ -305,10 +432,13 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
     last = rows[-1] if rows else None
     ratio, ratio_points = estimate_ratio(rows)
     cutoff = now - timedelta(days=HISTORY_DAYS)
-    history = [
-        {"t": r["timestamp"], "h5": num(r.get("five_hour_pct")), "d7": num(r.get("seven_day_pct"))}
-        for r in rows if parse_dt(r["timestamp"]) >= cutoff
-    ]
+    history = []
+    recent = [r for r in rows if parse_dt(r["timestamp"]) >= cutoff]
+    for i, r in enumerate(recent):          # repeated values add nothing (the poller can read every 30 s): keep changes + last
+        h = {"t": r["timestamp"], "h5": num(r.get("five_hour_pct")), "d7": num(r.get("seven_day_pct"))}
+        if history and i < len(recent) - 1 and (history[-1]["h5"], history[-1]["d7"]) == (h["h5"], h["d7"]):
+            continue
+        history.append(h)
     state = {
         "generated_at": iso(now),
         "fetched_at": last["timestamp"] if last else None,
@@ -360,12 +490,19 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
         row = build_row(payload, now)
         append_csv(data_dir / "usage.csv", row)
         breakdown = extract_breakdown(payload)
+        if breakdown:
+            append_breakdown(data_dir / "breakdown.csv", row, breakdown)
     except TrackerError as e:
         error, error_code, failure = str(e), e.code, e
     diagnostics = record_diagnostic(data_dir, now, failure)
     if breakdown is None:
         breakdown = previous_breakdown(data_dir)
-    state = write_outputs(data_dir, load_history(data_dir / "usage.csv"), now, error, breakdown, error_code, diagnostics)
+    rows = load_history(data_dir / "usage.csv")
+    if breakdown and isinstance(breakdown.get("rows"), list):
+        days = daily_breakdown(load_breakdown_history(data_dir / "breakdown.csv"), rows, now)
+        for r in breakdown["rows"]:
+            r["days"] = days.get(r.get("key"), [])
+    state = write_outputs(data_dir, rows, now, error, breakdown, error_code, diagnostics)
     if error:
         d = failure.detail
         extra = "".join(f" {k}={d[k]}" for k in ("status", "retry_after", "request_id") if d.get(k))
