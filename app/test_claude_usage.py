@@ -146,6 +146,22 @@ class OfflineTests(unittest.TestCase):
                 cu.read_token()
         self.assertEqual(cm.exception.code, "no_credentials")
 
+    def test_expired_token_is_refused_without_calling_the_api(self):
+        def creds(folder, expires):
+            (Path(folder) / ".credentials.json").write_text(json.dumps(
+                {"claudeAiOauth": {"accessToken": "tok", "expiresAt": int(expires.timestamp() * 1000)}}), encoding="utf-8")
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": home}):
+            os.environ.pop("CLAUDE_USAGE_TOKEN", None)
+            creds(home, cu.now_utc() + timedelta(hours=1))
+            self.assertEqual(cu.read_token(), "tok")
+            creds(home, cu.now_utc() - timedelta(minutes=5))
+            with mock.patch("urllib.request.urlopen") as net:
+                _, err, st = cu.run(self.dir)
+            net.assert_not_called()
+            self.assertEqual(st["error_code"], "token_expired")
+            self.assertTrue(st["diagnostics"]["last"]["expires_at"])
+            self.assertEqual(st["token_expires_at"], st["diagnostics"]["last"]["expires_at"])
+
     def test_token_from_environment(self):
         with mock.patch.dict(os.environ, {"CLAUDE_USAGE_TOKEN": "  abc  "}):
             self.assertEqual(cu.read_token(), "abc")

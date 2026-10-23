@@ -35,7 +35,7 @@ class LauncherTextTests(unittest.TestCase):
         used |= {f"main.{k}" for k in entries}
         used |= {f"main.{k}.desc" for k in entries}
         used |= {f"kind.{k}" for k in ("task", "systemd", "cron")}
-        used |= {f"error.{k}" for k in ("no_credentials", "bad_credentials", "auth", "http", "network", "bad_json", "unexpected_response")}
+        used |= {f"error.{k}" for k in ("no_credentials", "bad_credentials", "auth", "token_expired", "file_locked", "http", "network", "bad_json", "unexpected_response")}
         self.assertEqual(sorted(k for k in used if k not in strings.EN), [])
 
     def test_weekday_tables_have_seven_days(self):
@@ -70,7 +70,7 @@ class WebTextTests(unittest.TestCase):
             used |= set(re.findall(r"""data-i18n(?:-title|-aria)?="([^"]+)\"""", text))
         used = {k for k in used if not k.endswith(".")}     # prefixes of dynamic keys, checked explicitly below
         used |= {"status.ahead", "status.margin", "status.even"}
-        used |= {f"error.{k}" for k in ("no_credentials", "bad_credentials", "auth", "http", "network", "bad_json", "unexpected_response")}
+        used |= {f"error.{k}" for k in ("no_credentials", "bad_credentials", "auth", "token_expired", "file_locked", "http", "network", "bad_json", "unexpected_response")}
         self.assertEqual(sorted(k for k in used if k not in en), [])
 
 

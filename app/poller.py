@@ -9,7 +9,9 @@ Timing (the ladder):
   - a reading that shows a change (5-hour or weekly %) -> next one 30 s later;
   - each reading without change climbs one step: 1 min, 3 min, 5 min, 7 min, then 10 min (and stays there);
   - HTTP 429 (rate limited) -> next one 2 minutes later (or the Retry-After the API asks, if longer),
-    without moving on the ladder.
+    without moving on the ladder;
+  - expired token (401, or expiresAt already past) -> the poller watches ~/.claude/.credentials.json and
+    reads again as soon as Claude Code renews it, instead of waiting for the next step.
 
 Only one poller runs at a time (lock on data/poller.lock). Its state is written to data/poller.json
 (next reading time, current step), which the widget and the launcher read.
@@ -29,6 +31,8 @@ import claude_usage as cu
 LADDER_S = (30, 60, 180, 300, 420, 600)   # delay after a change, then after each reading without change
 RATE_LIMITED_S = 120                       # delay after HTTP 429
 TICK_S = 5                                 # sleep in short slices: survives sleep/hibernate and clock changes
+
+AUTH_CODES = ("auth", "token_expired")     # fixed by Claude Code renewing the credentials file
 
 LOCK_NAME = "poller.lock"
 STATE_NAME = "poller.json"
@@ -52,6 +56,15 @@ def signature(state: dict | None) -> tuple | None:
     if not state:
         return None
     return ((state.get("five_hour") or {}).get("pct"), (state.get("seven_day") or {}).get("pct"))
+
+
+def credentials_stamp():
+    """Changes whenever Claude Code rewrites its credentials file (None when there is no file)."""
+    try:
+        st = cu.credentials_path().stat()
+        return st.st_mtime_ns, st.st_size
+    except OSError:
+        return None
 
 
 def read_state(data_dir: Path) -> dict | None:
@@ -150,15 +163,21 @@ def loop(data_dir: Path = cu.DATA_DIR) -> int:
                 delay, step, reason = next_delay(step, before is not None and after != before, code, last.get("retry_after"))
             except Exception as e:                        # never let one bad reading kill the loop
                 cu.log(data_dir, f"POLLER unexpected error: {e!r}")
-                delay, step, reason = next_delay(step, False, "crash")
+                code = "crash"
+                delay, step, reason = next_delay(step, False, code)
             if reason == "rate_limited":
                 cu.log(data_dir, f"POLLER rate limited: next reading in {int(delay)} s")
+            watch = credentials_stamp() if code in AUTH_CODES else None
             due = time.time() + delay
             write_state(data_dir, pid=os.getpid(), started_at=started, last_at=cu.iso(cu.now_utc()),
                         next_at=cu.iso(cu.datetime.fromtimestamp(due, cu.timezone.utc)),
                         delay_s=delay, step=step, reason=reason, ladder_s=list(LADDER_S))
             while time.time() < due:
                 time.sleep(min(TICK_S, max(0.0, due - time.time())))
+                if watch is not None and credentials_stamp() != watch:
+                    cu.log(data_dir, "POLLER credentials file renewed: reading now")
+                    time.sleep(1)                         # let Claude Code finish writing it
+                    break
     except KeyboardInterrupt:
         return 0
     finally:

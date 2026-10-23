@@ -61,6 +61,7 @@
     const api = last.api_message || last.body || raw;
     const detail = `<dl>${row("diag.what", esc(api))}${row("diag.status", esc(last.status))}${row("diag.when", last.t ? when(last.t) : "")}`
       + `${row("diag.streak", diag && diag.consecutive ? diag.consecutive : "")}${row("diag.retry", esc(last.retry_after))}`
+      + `${row("diag.expired", last.expires_at ? when(last.expires_at) : "")}`
       + `${row("diag.request", esc(last.request_id))}${row("diag.endpoint", esc(last.url))}</dl>`
       + `<p class="hint">${hint}</p>`
       + (recent ? `<h4>${CU.t("diag.recent")}</h4><ul>${recent}</ul>` : "")

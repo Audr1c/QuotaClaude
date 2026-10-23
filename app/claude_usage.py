@@ -101,12 +101,32 @@ def num(v) -> float | None:
 
 # --------------------------------------------------------------------------- API
 
-def read_token() -> str:
+RENEW_HINT = ("Run `claude` once in a terminal: it renews the token (the Claude desktop app does not seem "
+              "to update this file). The next reading then starts by itself.")
+
+
+def credentials_path() -> Path:
+    base = Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else Path.home() / ".claude"
+    return base / ".credentials.json"
+
+
+def token_expiry() -> datetime | None:
+    """When the access token in .credentials.json expires (expiresAt, ms since epoch), or None if unknown."""
+    if os.environ.get("CLAUDE_USAGE_TOKEN"):
+        return None
+    try:
+        ms = (json.loads(credentials_path().read_text(encoding="utf-8")).get("claudeAiOauth") or {}).get("expiresAt")
+        return datetime.fromtimestamp(float(ms) / 1000, tz=timezone.utc) if ms else None
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def read_token(now: datetime | None = None) -> str:
+    """The OAuth access token. Refuses an expired one without calling the API (it would only answer 401)."""
     env = os.environ.get("CLAUDE_USAGE_TOKEN")
     if env:
         return env.strip()
-    base = Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else Path.home() / ".claude"
-    path = base / ".credentials.json"
+    path = credentials_path()
     if not path.exists():
         raise TrackerError(
             "no_credentials",
@@ -123,6 +143,10 @@ def read_token() -> str:
             "bad_credentials",
             "No accessToken in .credentials.json: a subscription login is required, not an API key.",
         )
+    expires = token_expiry()
+    if expires and expires <= (now or now_utc()):
+        raise TrackerError("token_expired", f"The Claude Code token expired at {iso(expires)}. " + RENEW_HINT,
+                           {"expires_at": iso(expires), "path": str(path)})
     return token
 
 
@@ -153,8 +177,7 @@ def fetch_usage(token: str) -> dict:
         if e.code in (401, 403):
             raise TrackerError(
                 "auth",
-                f"Access refused ({e.code}): the token has probably expired. "
-                f"Open Claude Code once, it refreshes it by itself. Detail: {body[:300]}", detail,
+                f"Access refused ({e.code}): the token has probably expired. {RENEW_HINT} Detail: {body[:300]}", detail,
             )
         if e.code == 429:
             raise TrackerError("rate_limited", f"HTTP 429 - rate limited: {detail.get('api_message') or body[:200]}", detail)
@@ -458,6 +481,7 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
         "error": error,
         "error_code": error_code,
         "diagnostics": diagnostics,
+        "token_expires_at": iso(token_expiry()) or None,
     }
     text = json.dumps(state, ensure_ascii=False, indent=1)
     _atomic_write(data_dir / "latest.json", text)
@@ -488,7 +512,7 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
     row, error, error_code, breakdown, failure = None, None, None, None, None
     try:
         if payload is None:
-            payload = fetch_usage(read_token())
+            payload = fetch_usage(read_token(now))
         _atomic_write(data_dir / "last_response.json", json.dumps(payload, ensure_ascii=False, indent=2))
         row = build_row(payload, now)
         try:
