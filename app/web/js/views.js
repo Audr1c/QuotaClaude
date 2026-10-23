@@ -118,7 +118,7 @@ window.CU = window.CU || {};
     } else if (s.day === null) {
       labels = [t("breakdown.earlier"), t("breakdown.earlier.short"), "…"];
     }
-    const title = when + " · " + t("breakdown.quota", { n: num(s.pts) }) + (s.est ? " · " + t("breakdown.est") : "");
+    const title = when + " · " + t("breakdown.quota", { n: num(s.pts) });
     return `<span class="day" style="flex-grow:${s.pts}" data-labels="${labels.map(esc).join("|")}" title="${esc(title)}"></span>`;
   }
 

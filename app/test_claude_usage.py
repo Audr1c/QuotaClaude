@@ -93,26 +93,39 @@ class OfflineTests(unittest.TestCase):
         self.assertEqual([r["pct"] for r in st["breakdown"]["rows"]], [28.0, 72.0])
         self.assertEqual(st["breakdown"]["rows"][0]["name"], "Claude Code")
 
-    def test_breakdown_split_by_local_day(self):
+    def test_breakdown_split_by_local_day_per_product(self):
         def p(d7, shares):
             out = payload(5.0, d7)
             if shares:
                 out["seven_day_breakdown"] = {"rows": [{"key": k, "display_name": k, "percent": v} for k, v in shares.items()]}
             return out
         local = lambda day, hour: datetime(2026, 10, day, hour, 0).astimezone()
-        cu.run(self.dir, p(10.0, {"code": 100, "chat": 0}), local(21, 12))
-        cu.run(self.dir, p(16.0, None), local(21, 20))            # week % known at 20:00, products not
-        _, _, st = cu.run(self.dir, p(20.0, {"code": 50, "chat": 50}), local(22, 12))
+        cu.run(self.dir, p(10.0, {"code": 100, "chat": 0}), local(21, 9))      # first record: 10 pts of Code so far
+        cu.run(self.dir, p(20.0, {"code": 100, "chat": 0}), local(21, 18))     # Wednesday: Code only (+10)
+        cu.run(self.dir, p(30.0, None), local(22, 9))                          # week % known, products not
+        _, _, st = cu.run(self.dir, p(40.0, {"code": 50, "chat": 50}), local(22, 18))   # Thursday: Chats only (+20)
         days = {r["key"]: r["days"] for r in st["breakdown"]["rows"]}
-        # chat: 0 -> 10 pts between the two records; 60 % of the week's rise happened before midnight
-        self.assertEqual(days["chat"], [{"day": "2026-10-21", "pts": 6.0, "est": False},
-                                        {"day": "2026-10-22", "pts": 4.0, "est": False}])
-        # code: its 10 pts were all used before the first record, in one segment (exact total, days unknown)
-        self.assertEqual([(s["pts"], s["est"]) for s in days["code"]], [(10.0, False)])
+        self.assertEqual(days["chat"], [{"day": "2026-10-22", "pts": 20.0}])
+        self.assertEqual(days["code"][-1], {"day": "2026-10-21", "pts": 10.0 if days["code"][0]["day"] is None else 20.0})
+        self.assertEqual(sum(g["pts"] for g in days["code"]), 20.0)
+        self.assertNotIn("2026-10-22", [g["day"] for g in days["code"]])
         lines = (self.dir / "breakdown.csv").read_text(encoding="utf-8").strip().splitlines()
-        self.assertEqual(len(lines), 1 + 4)                       # header + 2 products x 2 records
-        cu.run(self.dir, p(20.0, {"code": 50, "chat": 50}), local(22, 13))
-        self.assertEqual(len((self.dir / "breakdown.csv").read_text(encoding="utf-8").strip().splitlines()), 5)  # unchanged: not recorded
+        self.assertEqual(len(lines), 1 + 6)                       # header + 2 products x 3 records
+        cu.run(self.dir, p(40.0, {"code": 50, "chat": 50}), local(22, 19))
+        self.assertEqual(len((self.dir / "breakdown.csv").read_text(encoding="utf-8").strip().splitlines()), 7)  # unchanged: not recorded
+
+    def test_csv_open_in_a_spreadsheet(self):
+        # breakdown.csv locked (LibreOffice/Excel): the reading still succeeds
+        with mock.patch.object(cu, "append_breakdown", side_effect=PermissionError(13, "Permission denied")):
+            p = payload(10.0, 20.0)
+            p["seven_day_breakdown"] = {"rows": [{"key": "chat", "display_name": "Chats", "percent": 100}]}
+            row, err, _ = cu.run(self.dir, p, T0)
+        self.assertIsNone(err)
+        self.assertIn("breakdown.csv is open", (self.dir / "tracker.log").read_text(encoding="utf-8"))
+        # usage.csv locked: a clear error code instead of a crash
+        with mock.patch.object(cu, "append_csv", side_effect=PermissionError(13, "Permission denied")):
+            _, err, st = cu.run(self.dir, payload(11.0, 20.0), T0 + timedelta(minutes=1))
+        self.assertEqual(st["error_code"], "file_locked")
 
     def test_history_drops_repeated_values(self):
         for i, v in enumerate((10.0, 10.0, 10.0, 12.0, 12.0)):

@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -247,7 +248,14 @@ def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
 def _atomic_write(path: Path, text: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    for attempt in range(20):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:          # Windows: the widget server (or a sync tool) has the file open right now
+            if attempt == 19:
+                raise
+            time.sleep(0.1)
 
 
 def extract_breakdown(payload: dict) -> dict | None:
@@ -270,7 +278,11 @@ def load_breakdown_history(path: Path) -> list[dict]:
     if not path.exists():
         return []
     snaps: dict[str, dict] = {}
-    with path.open(newline="", encoding="utf-8") as fh:
+    try:
+        fh = path.open(newline="", encoding="utf-8")
+    except PermissionError:                 # locked by a spreadsheet: no per-day split this time
+        return []
+    with fh:
         for r in csv.DictReader(fh):
             t = parse_dt(r.get("timestamp"))
             if not t or num(r.get("pct")) is None:
@@ -316,13 +328,15 @@ def _local_midnights(start: datetime, end: datetime) -> list[datetime]:
 
 def daily_breakdown(snaps: list[dict], rows: list[dict], now: datetime) -> dict:
     """
-    Split each product's weekly usage by local day: {key: [{"day": "YYYY-MM-DD" or None, "pts", "est"}]}.
+    Split each product's weekly usage by local day: {key: [{"day": "YYYY-MM-DD" or None, "pts"}]}.
 
-    pts = points of the weekly quota used by that product that day. A product's cumulative quota at a
-    recorded reading is share x week used / 100; at a midnight between two records it is interpolated on
-    the week's % (from usage.csv), so each day gets the usage that happened in it. Before the first record
-    of the week the product mix is assumed constant ("est": estimated). Days before the first reading of
-    the week cannot be told apart: they form one segment with "day": None ("earlier").
+    Each product is measured on its own: its cumulative quota at a recorded reading is its share x week
+    used / 100 (breakdown.csv), and a day gets the rise of THAT product between the day's two midnights.
+    So a Code-only day shows up in the Code bar and not in the others.
+    At a midnight between two records the value is interpolated on the week's % (usage.csv); records
+    are at most a few minutes apart while the poller runs, so this only matters when it was off.
+    Before the first record of the week nothing tells the days apart: that usage is one segment with
+    "day": None ("earlier"), exact in total for each product but not split by day.
     """
     if not snaps or not snaps[-1]["reset"]:
         return {}
@@ -333,14 +347,13 @@ def daily_breakdown(snaps: list[dict], rows: list[dict], now: datetime) -> dict:
         return {}
     usage = [(parse_dt(r["timestamp"]), num(r.get("seven_day_pct"))) for r in rows
              if _same(parse_dt(r.get("seven_day_resets_at")), reset) and num(r.get("seven_day_pct")) is not None]
-    usage = [(t, v) for t, v in usage if t >= start]
-    end = min(now, snaps[-1]["t"])
-    first_usage = usage[0][0] if usage else snaps[0]["t"]
-    bounds = sorted({start, end, *_local_midnights(start, end), *([first_usage] if start < first_usage < end else [])})
-    origin = {"t": start, "d7": 0.0, "shares": {}}             # nothing is used when the week starts
+    usage = [(t, v) for t, v in usage if start <= t]
+    first, end = snaps[0]["t"], min(now, snaps[-1]["t"])
+    # boundaries: week start, the first record, then every local midnight after it, then the last record
+    bounds = sorted({start, first, end, *(m for m in _local_midnights(start, end) if m > first)})
 
-    def d7_at(b: datetime) -> float | None:
-        v = None
+    def d7_at(b: datetime) -> float:
+        v = 0.0
         for t, x in usage:
             if t > b:
                 break
@@ -350,40 +363,30 @@ def daily_breakdown(snaps: list[dict], rows: list[dict], now: datetime) -> dict:
     def quota(snap: dict, key: str) -> float:
         return (snap["shares"].get(key) or 0.0) * snap["d7"] / 100.0
 
+    def quota_at(b: datetime, key: str) -> float:
+        if b < first:
+            return 0.0                                          # only the week start is before the first record
+        before = [s for s in snaps if s["t"] <= b][-1]
+        after = next((s for s in snaps if s["t"] > b), None)
+        if after is None or after["d7"] <= before["d7"]:
+            return quota(before, key)
+        frac = min(1.0, max(0.0, (d7_at(b) - before["d7"]) / (after["d7"] - before["d7"])))
+        return quota(before, key) + frac * (quota(after, key) - quota(before, key))
+
     out: dict[str, list] = {}
     for key in snaps[-1]["shares"]:
-        points = []                                             # (time, cumulative quota or None, estimated)
-        for b in bounds:
-            before = origin
-            for s in snaps:
-                if s["t"] <= b:
-                    before = s
-            after = next((s for s in snaps if s["t"] > b), None)
-            if b == start:
-                q, est = 0.0, False
-            elif after is None:
-                q, est = quota(before, key), False
-            else:
-                d = d7_at(b)
-                if d is None:
-                    q, est = None, True
-                else:
-                    span = after["d7"] - before["d7"]
-                    frac = min(1.0, max(0.0, (d - before["d7"]) / span)) if span > 0 else 0.0
-                    qb = quota(before, key)
-                    q, est = qb + frac * (quota(after, key) - qb), before is origin
-            points.append((b, q, est))
-        points = [p for p in points if p[1] is not None]        # an unknown midnight merges the days around it
         segs = []
-        for (a, qa, ea), (b, qb, eb) in zip(points, points[1:]):
-            one_day = a.astimezone().date() == (b - timedelta(seconds=1)).astimezone().date()
-            day = a.astimezone().date().isoformat() if one_day else None
-            pts = max(0.0, qb - qa)
+        for a, b in zip(bounds, bounds[1:]):
+            pts = max(0.0, quota_at(b, key) - quota_at(a, key))
+            if b == first:                                      # everything before tracking started
+                one_day = a.astimezone().date() == (b - timedelta(seconds=1)).astimezone().date()
+                day = a.astimezone().date().isoformat() if one_day else None
+            else:
+                day = a.astimezone().date().isoformat()
             if segs and day is not None and segs[-1]["day"] == day:
                 segs[-1]["pts"] += pts
-                segs[-1]["est"] = segs[-1]["est"] or ea or eb
             else:
-                segs.append({"day": day, "pts": pts, "est": ea or eb})
+                segs.append({"day": day, "pts": pts})
         out[key] = [dict(g, pts=round(g["pts"], 2)) for g in segs if g["pts"] >= 0.01]
     return out
 
@@ -488,10 +491,18 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
             payload = fetch_usage(read_token())
         _atomic_write(data_dir / "last_response.json", json.dumps(payload, ensure_ascii=False, indent=2))
         row = build_row(payload, now)
-        append_csv(data_dir / "usage.csv", row)
+        try:
+            append_csv(data_dir / "usage.csv", row)
+        except PermissionError:
+            raise TrackerError("file_locked", "Cannot write data/usage.csv: it is open in another program "
+                                              "(Excel, LibreOffice...). Close it; the next reading retries.",
+                               {"path": str(data_dir / "usage.csv")})
         breakdown = extract_breakdown(payload)
         if breakdown:
-            append_breakdown(data_dir / "breakdown.csv", row, breakdown)
+            try:
+                append_breakdown(data_dir / "breakdown.csv", row, breakdown)
+            except PermissionError:      # open in a spreadsheet: skip this record, the reading itself is fine
+                log(data_dir, "WARNING data/breakdown.csv is open in another program: per-product record skipped")
     except TrackerError as e:
         error, error_code, failure = str(e), e.code, e
     diagnostics = record_diagnostic(data_dir, now, failure)
