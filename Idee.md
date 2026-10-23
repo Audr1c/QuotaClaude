@@ -4,6 +4,26 @@ Pistes d'évolution de Claude Usage Tracker. Contraintes communes : l'endpoint `
 
 ---
 
+## À faire
+
+### Audit de sécurité du petit serveur (`app/server.py`)
+- Vérifier que l'écoute reste limitée à `127.0.0.1` et que le contrôle du `Host` (anti DNS-rebinding) couvre toutes les routes.
+- `do_POST` (bouton Actualiser) : un `Origin` absent est accepté aujourd'hui. Vérifier qu'une page tierce ne peut pas déclencher de relevés en boucle (risque de 429), et envisager un jeton anti-CSRF.
+- Fichiers statiques `/web/` et `/data/` : tester la traversée de chemin (`..`, `%2e%2e`, `\`, liens symboliques) et s'assurer que seuls les fichiers prévus sont servis (jamais `.credentials.json`, `tracker.log`, `poller.lock`).
+- En-têtes de réponse : `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Cache-Control` sur les données.
+- Vérifier qu'aucune réponse, aucun message d'erreur et aucune ligne de log ne contient le jeton.
+- Sur une machine partagée, le port local est accessible aux autres utilisateurs : évaluer ce qu'ils peuvent lire ou déclencher.
+
+### Consommation de ressources
+- Mesurer d'abord : CPU, mémoire et réveils du poller (`poller.py`), du serveur et de l'onglet du widget sur une journée (Gestionnaire des tâches / `perfmon`, `ps`/`top` sous Linux).
+- Pistes de réduction :
+  - le poller se réveille toutes les 5 s (`TICK_S`) pour surveiller l'horloge et le fichier d'identifiants ; allonger ce délai quand il n'y a rien à surveiller ;
+  - `importlib.reload` à chaque relevé : à garder seulement si le coût est négligeable ;
+  - limiter la taille de `latest.json` et la relecture complète de `usage.csv` et `breakdown.csv` à chaque relevé (ne lire que la semaine en cours) ;
+  - côté widget : un seul intervalle de 10 s, mise à jour du DOM seulement si les données ont changé, pause quand l'onglet est caché (`document.visibilityState`).
+
+---
+
 ## 1. Décentraliser le poller (NAS local ou serveur externe)
 
 **Objectif.** Faire tourner le relevé 24 h/24 sur une machine toujours allumée (NAS, petit serveur) et consulter le quota depuis n'importe quel appareil, sans dépendre du PC où Claude Code est connecté.
