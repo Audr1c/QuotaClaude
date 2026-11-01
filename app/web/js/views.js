@@ -26,7 +26,7 @@ window.CU = window.CU || {};
         ${CU.gauge({
           label: t("card.five"),
           rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.limit,
-                    markers: [{ v: five.pace, color: BLUE_INK }, { v: five.limit, color: CLAY_INK }] }],
+                    markers: [{ v: five.pace, color: BLUE_INK }, { v: five.weekPace, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(five.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
           footer: resetText(five),
@@ -34,7 +34,7 @@ window.CU = window.CU || {};
         <ul class="legend">
           ${li("dot", BLUE, t("legend.used"), pct(five.used))}
           ${li("tri", BLUE_INK, t("legend.pace5"), pct(five.pace))}
-          ${li("tri", CLAY_INK, t("legend.limit5"), pct(five.limit))}
+          ${li("tri", CLAY_INK, t("legend.limit5"), pct(five.weekPace))}
           ${li("sp", "", t("legend.max5"), pct(five.maxRate, 1) + t("unit.perhour"))}
           ${li("sp", "", t("legend.advice5"), pct(five.paceRate, 1) + t("unit.perhour"))}
         </ul>
@@ -71,7 +71,7 @@ window.CU = window.CU || {};
       rings: [
         { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.limit, markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
         { r: 92, width: 16, used: five.used, color: BLUE, limit: five.limit,
-          markers: [{ v: five.pace, color: BLUE_INK, side: "in" }, { v: five.limit, color: CLAY_INK, side: "out" }] },
+          markers: [{ v: five.pace, color: BLUE_INK, side: "in" }, { v: five.weekPace, color: CLAY_INK, side: "out" }] },
       ],
       center: [
         { dy: -38, text: t("compact.label.five"), size: 10, fill: "var(--muted)", spacing: "1.2" },
@@ -92,7 +92,7 @@ window.CU = window.CU || {};
         </div>
         <ul class="legend">
           ${li("tri", BLUE_INK, t("compact.legend.pace5"), pct(five.pace))}
-          ${li("tri", CLAY_INK, t("compact.legend.limit5"), pct(five.limit))}
+          ${li("tri", CLAY_INK, t("compact.legend.limit5"), pct(five.weekPace))}
           ${li("tri", CLAY_INK, t("compact.legend.pace7"), pct(seven.pace))}
         </ul>
         <div class="stats">

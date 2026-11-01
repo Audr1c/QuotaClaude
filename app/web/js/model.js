@@ -92,6 +92,8 @@ window.CU = window.CU || {};
     // today's remaining budget expressed in % of a 5-hour window: the 5-hour usage you can reach and still be on budget
     // (not capped: exceeds 100 when today's budget is worth more than one window)
     five.limit = five.active && seven.limit != null ? five.used + seven.todayLeft * 100 / ratio : null;
+    // the 5-hour usage at which the week would be exactly on its (working-time) pace: same quantity as the weekly tick
+    five.weekPace = five.active && seven.pace != null ? five.used + (seven.pace - seven.used) * 100 / ratio : null;
     five.maxRate = (100 - five.used) / (five.left / H);      // 5h-% per hour to end exactly at the reset
     five.paceRate = seven.ratePerHour * 100 / ratio;          // 5h-% per hour at the weekly pace
 
