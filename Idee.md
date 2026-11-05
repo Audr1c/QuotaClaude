@@ -118,3 +118,22 @@ Pistes d'évolution de Claude Usage Tracker. Contraintes communes : l'endpoint `
 2. **Idée 3 (VS Code), version locale** : lit `latest.json`, donc ne dépend pas de l'idée 1 ; la prise en charge d'une source distante vient plus tard.
 3. **Idée 1 (poller distant)** : le plus gros morceau, surtout pour la sécurité ; commencer par l'API en lecture seule et l'option « le PC pousse ses relevés ».
 4. **Idée 2 (Android)** : à faire en dernier, car elle exige l'API et l'accès distant de l'idée 1 ; la PWA peut servir d'étape intermédiaire dès que `/api/latest` existe.
+
+5. idee : faire un graphique historiue qui montre l'usage en %5h par heure utiliser récement 
+6. faire un graphique de l'evolution de la vaelure de %5h/%7j, qui tourne autoure de 12 13%7j = 100%5h mais   ca évoulue et ca serait bien d'avoir un graph de ca 
+
+7. incorporer lpus de donné et d'idee dans d'autre repo, voir "RepoTolookat.txt"
+---
+
+## Statut des idées 5 à 7 (branche `feature/graphiques-historique`)
+
+- **5 (usage par heure)** : fait, graphique « Usage par heure (24 dernières heures) » (`app/web/js/charts.js`, `CU.hourly` dans `model.js`).
+- **6 (évolution du ratio 5 h → semaine)** : fait, série quotidienne `ratio_daily` calculée sur tout `usage.csv` (`claude_usage.py`), tracée dans le même fichier.
+- **7 (autres dépôts)** : 5 dépôts clonés dans `repos-externes/` (ignoré par Git) avec une analyse `ANALYSE-*.md` chacun et une `SYNTHESE.md`.
+
+### Pistes retenues des dépôts (aucun code copié, aucun dépôt à intégrer)
+1. **Lecteur local des transcripts** `~/.claude/projects/**/*.jsonl` (Python, incrémental par décalage d'octets, dédoublonné sur `message.id`, ne gardant que `usage`/`model`/`timestamp`, jamais le contenu) vers un `tokens.csv` par heure. Effort M.
+2. **Taux de cache hit** = `cache_read / (cache_read + cache_creation + input)`. Effort S une fois le lecteur écrit.
+3. **Tokens par % de quota** : croiser `tokens.csv` et `usage.csv` pour remplacer le ratio estimé par une valeur mesurée. Effort M à L.
+4. Tokens par jour / modèle / projet, coût équivalent API (tarifs dans un fichier de config). Effort M.
+- À faire après l'audit de sécurité du serveur : ne jamais exposer les transcripts via `server.py`.

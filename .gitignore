@@ -20,3 +20,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Repos externes clonés pour analyse (idée 7) ---
+repos-externes/

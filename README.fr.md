@@ -45,6 +45,16 @@ Jauges de la fenêtre 5 heures et de la semaine, bascule compact/détaillé, **r
 
 Dans la répartition, la barre de chaque produit a un segment par jour local, de la même couleur, avec de fins séparateurs, et le nom du jour écrit dedans (nom complet, puis abréviations plus courtes, puis une lettre, puis rien, selon la place). Survole un segment pour voir sa date et ses points. Chaque produit est mesuré séparément : le segment d'un jour correspond à ce que **ce** produit a consommé ce jour-là (d'après les parts par produit enregistrées dans `breakdown.csv` à chaque changement), donc un jour où tu n'as utilisé que Code n'apparaît que dans la barre Code. L'usage d'avant le début du suivi par produit cette semaine forme un seul segment « Avant » (exact au total, mais pas découpé par jour).
 
+Trois panneaux d'historique repliés se trouvent sous la répartition :
+
+- **Usage par heure** : barres de la fenêtre de 5 h consommée à chaque heure (1 h, 3 h, 6 h ou 1 jour par barre selon la plage), face au rythme horaire en pointillés qui tient ton budget du jour.
+- **Ratio 5 h → semaine dans le temps** : combien de % de la semaine coûte une fenêtre de 5 h pleine, jour par jour (points) et en estimation cumulée, celle que le widget utilise (ligne).
+- **Tokens et cache** : les quatre types de tokens (entrée fraîche, écriture de cache, lecture de cache, sortie) avec leur nombre, leur part des tokens, leur prix relatif et leur part du coût, l'économie apportée par le cache et une vue par jour. Le coût est en équivalents de tokens d'entrée normaux (lecture de cache × 0,1, écriture × 1,25 ou × 2, sortie × 5), pas en dollars ; la pondération réelle du quota n'est pas publiée.
+
+Les deux premiers ont un sélecteur de plage et une petite vue d'ensemble en dessous, comme une courbe de bourse : glisse la fenêtre pour la déplacer, tire ses bords pour zoomer, clique à côté pour y sauter. La plage est mémorisée dans le navigateur. Le panneau des tokens a ses propres boutons 7 j / 14 j / 30 j / Tout.
+
+Les chiffres de tokens viennent des transcripts de Claude Code (`~/.claude/projects/**/*.jsonl`, ou `CLAUDE_PROJECTS_DIR`), lus de façon incrémentale par `transcripts.py` : seuls les nombres d'usage, le modèle, l'heure et l'identifiant du message sont lus dans chaque ligne, jamais le texte des conversations. Les chats et Cowork consomment aussi le quota sans laisser de transcript : les tokens ne couvrent que Claude Code.
+
 ### Raccourcis en ligne de commande
 
 ```
@@ -96,6 +106,8 @@ Tout reste dans le dossier `app/data/` à côté du code (ignoré par git, cré�
 | `usage.csv` | une ligne par relevé : heure, % 5 heures, % semaine, heures de reset |
 | `latest.json` / `latest.js` | dernier état + historique récent (seulement les relevés où les valeurs ont changé, plus le dernier), lus par le widget |
 | `breakdown.csv` | parts hebdo par produit, une ligne par produit à chaque changement ; sert à découper les barres de répartition par jour |
+| `tokens.csv` | compteurs de tokens par heure, modèle et type d'agent (principal / sous-agent), lus dans les transcripts de Claude Code (nombres seulement) |
+| `transcripts_state.json` | où le lecteur de transcripts s'est arrêté dans chaque fichier, et ses compteurs horaires |
 | `poller.json` | état du poller : heure du prochain relevé, palier actuel |
 | `poller.lock` | verrou pour qu'un seul poller tourne à la fois |
 | `last_response.json` | réponse brute de l'API au dernier relevé (débogage) |
@@ -152,6 +164,7 @@ app/                        tout le reste
   launcher/                 code du menu et traductions (strings.py)
   claude_usage.py           lit le quota, écrit data/
   poller.py                 poller adaptatif (relevés en arrière-plan)
+  transcripts.py            compteurs de tokens locaux d'après les transcripts de Claude Code
   server.py                 serveur local du widget
   web/                      le widget (HTML, CSS, JS ; EN/FR)
   windows/  linux/          scripts d'installation/désinstallation du planificateur
@@ -165,6 +178,7 @@ app/                        tout le reste
 - Aucune donnée ne quitte ta machine, hormis la requête vers l'API d'Anthropic avec ton propre jeton.
 - Le jeton est lu à l'exécution, jamais copié ni journalisé. `app/data/` et les identifiants sont dans `.gitignore`.
 - Le serveur n'écoute que sur `127.0.0.1`.
+- Les transcripts de Claude Code contiennent tes conversations. `transcripts.py` n'y lit que des nombres de tokens, le modèle, l'heure, l'identifiant du message et l'indicateur de sous-agent, et n'écrit que des compteurs (`tokens.csv`) ; jamais le texte.
 
 ## Remarques
 

@@ -13,6 +13,7 @@
   const SERVED = location.protocol.startsWith("http");
   const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen", FORMULAS_KEY = "cu.formulasOpen";
   const HOURS_KEY = "cu.hours";
+  const chartsOpen = {};
   let view = "detail", breakdownOpen = false, formulasOpen = false, hours = 8;
   try {
     const saved = parseInt(localStorage.getItem(HOURS_KEY), 10);
@@ -25,6 +26,7 @@
 
   // the breakdown <details> is recreated on every render: remember whether it is open
   $("app").addEventListener("toggle", e => {
+    if (e.target.classList.contains("chart")) { chartsOpen[e.target.dataset.key] = e.target.open; return; }
     const isFormulas = e.target.classList.contains("formulas");
     if (!isFormulas && !e.target.classList.contains("breakdown")) return;
     if (isFormulas) formulasOpen = e.target.open; else { breakdownOpen = e.target.open; CU.fitBars(e.target); }
@@ -72,6 +74,7 @@
 
   /* ---------- rendering ---------- */
   function render() {
+    if (CU.dragging) return;                 // a chart range is being dragged: do not rebuild the page under the pointer
     const D = window.CLAUDE_USAGE, m = CU.compute(D, Date.now(), { hoursPerDay: hours });
     const err = $("err");
     if (!m) {
@@ -82,8 +85,9 @@
       $("meta").textContent = "—";
       return;
     }
-    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.formulas(m, formulasOpen);
+    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.charts(m).replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : "")) + CU.formulas(m, formulasOpen);
     CU.fitBars($("app"));
+    CU.chartsAfterRender($("app"));
 
     const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
     const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";

@@ -3,7 +3,7 @@
   --bg: #F0EEE6; --card: #FAF9F5; --text: #141413; --muted: #6F6D66;
   --track: #E3E0D5; --line: #DEDACF; --tick: #B9B5A9; --hover: #ECE9DF;
   --clay: #D97757; --clay-ink: #B5532F;
-  --blue: #6A9BCC; --blue-ink: #3F73A8;
+  --blue: #6A9BCC; --blue-ink: #3F73A8; --violet: #8B6FB0;
   --sage: #6B7F52; --ok: #6B8F4E; --bad: #C2453B;
   --serif: "Tiempos Text", Georgia, "Times New Roman", serif;
 }
@@ -11,13 +11,13 @@
   :root:not([data-theme="light"]) {
     --bg: #262624; --card: #30302E; --text: #F0EEE6; --muted: #A6A39A;
     --track: #44433F; --line: #3D3C38; --tick: #66645E; --hover: #3A3936;
-    --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383; --ok: #8FB574; --bad: #E4766A;
+    --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383; --ok: #8FB574; --bad: #E4766A; --violet: #B49AD6;
   }
 }
 :root[data-theme="dark"] {
   --bg: #262624; --card: #30302E; --text: #F0EEE6; --muted: #A6A39A;
   --track: #44433F; --line: #3D3C38; --tick: #66645E; --hover: #3A3936;
-  --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383; --ok: #8FB574; --bad: #E4766A;
+  --clay-ink: #E8957A; --blue-ink: #8DB6DE; --sage: #9DB383; --ok: #8FB574; --bad: #E4766A; --violet: #B49AD6;
 }
 
 * { box-sizing: border-box; }
@@ -169,3 +169,42 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .eqs tr.flag th, .eqs tr.flag code { color: var(--clay-ink); }
 .badge { font-size: 10px; border: 1px solid currentColor; border-radius: 999px; padding: 1px 6px; white-space: nowrap; font-weight: 400; }
 @media (max-width: 560px) { .eqs th { width: 42%; } }
+
+/* ---------- history charts ---------- */
+.chart { margin-top: 16px; padding-top: 14px; padding-bottom: 14px; }
+.chart summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.chart summary::-webkit-details-marker { display: none; }
+.chart summary::before { content: "›"; color: var(--muted); transition: transform .15s; }
+.chart[open] summary::before { transform: rotate(90deg); }
+.chart h2 { font-size: 16px; }
+.chart .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+.chart svg { display: block; width: 100%; height: auto; margin-top: 12px; }
+.chart svg .ax { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.chart .note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; }
+.chart .stats { margin-top: 12px; }
+.chart .presets { margin-top: 12px; }
+.chart .rlabel { margin: 6px 0 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart .rlabel span { color: var(--muted); margin-left: 6px; }
+.chart .sub { margin: 16px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.chart div.plot { margin-top: 0; }
+.chart svg.mini { margin-top: 6px; cursor: grab; touch-action: none; user-select: none; }
+.chart svg.mini:active { cursor: grabbing; }
+.mini .mb { fill: var(--blue); opacity: .55; }
+.mini .ml { fill: none; stroke: var(--clay); stroke-width: 1.6; }
+.mini .dim { fill: var(--card); opacity: .65; }
+.mini .win { fill: none; stroke: var(--muted); stroke-width: 1; }
+.mini .hdl { fill: var(--muted); cursor: ew-resize; }
+.eqs.tokens td, .eqs.tokens th { padding: 5px 8px 5px 0; font-variant-numeric: tabular-nums; font-size: 12.5px; width: auto; }
+.eqs.tokens th { white-space: nowrap; font-weight: 500; }
+.eqs.tokens tr:first-child td { color: var(--muted); font-size: 11px; border-top: 0; }
+.eqs.tokens td:nth-child(n+3) { text-align: right; }
+.eqs.tokens td.hits span + span { margin-left: 8px; }
+.eqs.tokens .dot { margin-right: 6px; }
+.tbar { display: flex; height: 9px; min-width: 60px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.tbar span { display: block; height: 100%; }
+.share { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--track); margin-bottom: 6px; }
+.share span { display: block; min-width: 2px; }
+.eqs.tokens small { display: block; margin-left: 16px; font-weight: 400; font-size: 11px; color: var(--muted); white-space: normal; }
+.eqs.tokens.types th { white-space: normal; }
+.eqs.tokens.types td:nth-child(n+2) { text-align: right; }

@@ -110,6 +110,10 @@ window.CU = window.CU || {};
       errorCode: D.error_code,
       diagnostics: D.diagnostics || null,
       history: D.history || [],
+      ratioDaily: D.ratio_daily || [],
+      tokens: D.tokens || null,
+      hourly5: D.hourly_5h || [],          // [[hour_iso, 5h-%]] over the whole history
+      firstAt: D.first_at || null,
       // per-product breakdown: share of what was used, and the equivalent in points of the weekly quota
       breakdown: D.breakdown && D.breakdown.rows
         ? D.breakdown.rows.map(r => ({ name: r.name, share: r.pct || 0, quota: (r.pct || 0) * seven.used / 100, days: r.days || [] }))

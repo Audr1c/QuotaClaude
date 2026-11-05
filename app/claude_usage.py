@@ -243,14 +243,8 @@ def _same(a: datetime | None, b: datetime | None) -> bool:
     return a is not None and b is not None and abs((a - b).total_seconds()) <= SAME_WINDOW_TOLERANCE_S
 
 
-def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
-    """
-    How many % of the week one full 5-hour window costs.
-    Between consecutive readings inside the SAME windows (no reset in between) we add up
-    the 5h increase and the 7d increase: ratio = 100 * sum(d7) / sum(d5).
-    Returns (ratio, or None when there is not enough data; total 5h points observed).
-    """
-    s5 = s7 = 0.0
+def _same_window_deltas(rows: list[dict]):
+    """(timestamp, d5, d7) for each pair of consecutive readings inside the SAME windows with d5 > 0 and d7 >= 0."""
     for a, b in zip(rows, rows[1:]):
         a5, b5 = num(a.get("five_hour_pct")), num(b.get("five_hour_pct"))
         a7, b7 = num(a.get("seven_day_pct")), num(b.get("seven_day_pct"))
@@ -261,8 +255,89 @@ def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
             continue
         d5, d7 = b5 - a5, b7 - a7
         if d5 > 0 and d7 >= 0:
-            s5 += d5
-            s7 += d7
+            yield b["timestamp"], d5, d7
+
+
+def weekly_by_day(rows: list[dict]) -> dict:
+    """Weekly % consumed per UTC day: increases between consecutive readings of the same 7-day window."""
+    out: dict = {}
+    for a, b in zip(rows, rows[1:]):
+        a7, b7 = num(a.get("seven_day_pct")), num(b.get("seven_day_pct"))
+        if None in (a7, b7) or not _same(parse_dt(a.get("seven_day_resets_at")), parse_dt(b.get("seven_day_resets_at"))):
+            continue
+        if b7 > a7:
+            out[b["timestamp"][:10]] = out.get(b["timestamp"][:10], 0.0) + (b7 - a7)
+    return out
+
+
+def tokens_state(data_dir: Path, rows: list[dict], now: datetime):
+    """Token counters from the local transcripts (see transcripts.py), only for the real data folder.
+    Never lets a problem there break a quota reading."""
+    if data_dir.resolve() != DATA_DIR.resolve():
+        return None
+    try:
+        import importlib
+        import transcripts
+        transcripts = importlib.reload(transcripts)      # the poller is long-lived: pick up script updates like it does for this file
+        return transcripts.summary(transcripts.scan(data_dir), now, weekly_by_day(rows))
+    except Exception as e:                      # unreadable folder, odd file: log the type only, never a line of a transcript
+        log(data_dir, f"transcripts: {type(e).__name__}")
+        return None
+
+
+def hourly_5h(rows: list[dict]) -> list:
+    """5-hour usage consumed per clock hour (UTC), whole history: [[hour_iso, 5h-%]], hours without usage left out.
+    Sum of the increases between consecutive readings of the same 5-hour window, credited to the later reading's hour."""
+    out: dict = {}
+    for a, b in zip(rows, rows[1:]):
+        a5, b5 = num(a.get("five_hour_pct")), num(b.get("five_hour_pct"))
+        if None in (a5, b5) or b5 <= a5:
+            continue
+        if not _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+            continue
+        h = parse_dt(b["timestamp"]).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+        out[h] = out.get(h, 0.0) + (b5 - a5)
+    return [[h, round(v, 1)] for h, v in sorted(out.items())]
+
+
+MIN_5H_POINTS_PER_DAY = 5.0      # a day with less 5h usage is too noisy to give its own ratio (weekly % are integers)
+
+
+def ratio_daily(rows: list[dict]) -> list[dict]:
+    """
+    Evolution of the 5h -> week ratio, one entry per UTC day with usage: {day, d5, d7, ratio, cum}.
+    `ratio` = that day alone (None when under MIN_5H_POINTS_PER_DAY), `cum` = the all-time estimate up to the end of that
+    day (None until MIN_5H_POINTS_FOR_RATIO), i.e. what the widget would have shown that evening.
+    """
+    days: dict[str, list[float]] = {}
+    for ts, d5, d7 in _same_window_deltas(rows):
+        acc = days.setdefault(ts[:10], [0.0, 0.0])
+        acc[0] += d5
+        acc[1] += d7
+    out, c5, c7 = [], 0.0, 0.0
+    for day in sorted(days):
+        d5, d7 = days[day]
+        c5 += d5
+        c7 += d7
+        out.append({
+            "day": day, "d5": round(d5, 1), "d7": round(d7, 1),
+            "ratio": round(100.0 * d7 / d5, 2) if d5 >= MIN_5H_POINTS_PER_DAY else None,
+            "cum": round(100.0 * c7 / c5, 2) if c5 >= MIN_5H_POINTS_FOR_RATIO and c7 > 0 else None,
+        })
+    return out
+
+
+def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
+    """
+    How many % of the week one full 5-hour window costs.
+    Between consecutive readings inside the SAME windows (no reset in between) we add up
+    the 5h increase and the 7d increase: ratio = 100 * sum(d7) / sum(d5).
+    Returns (ratio, or None when there is not enough data; total 5h points observed).
+    """
+    s5 = s7 = 0.0
+    for _, d5, d7 in _same_window_deltas(rows):
+        s5 += d5
+        s7 += d7
     if s5 < MIN_5H_POINTS_FOR_RATIO or s7 <= 0:
         return None, s5
     return 100.0 * s7 / s5, s5
@@ -475,6 +550,10 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
         "ratio_estimate": round(ratio, 2) if ratio else None,
         "ratio_points": round(ratio_points, 1),
         "ratio_default": DEFAULT_RATIO,
+        "ratio_daily": ratio_daily(rows),
+        "hourly_5h": hourly_5h(rows),
+        "first_at": rows[0]["timestamp"] if rows else None,
+        "tokens": tokens_state(data_dir, rows, now),
         "samples": len(rows),
         "history": history,
         "breakdown": breakdown,
