@@ -338,11 +338,36 @@ class LiveTest(unittest.TestCase):
 class TranscriptsTest(unittest.TestCase):
     """Token counters read from fake transcripts (never the real ~/.claude)."""
 
-    def line(self, mid, hour, out, cr=0, cw=0, text="SECRET"):
-        return json.dumps({"type": "assistant", "timestamp": f"2026-11-05T{hour}:10:00.000Z",
+    def line(self, mid, hour, out, cr=0, cw=0, text="SECRET", think=0, side=False):
+        return json.dumps({"type": "assistant", "timestamp": f"2026-11-05T{hour}:10:00.000Z", "isSidechain": side,
                            "message": {"id": mid, "model": "m1", "content": text,
                                        "usage": {"input_tokens": 2, "output_tokens": out,
+                                                 "output_tokens_details": {"thinking_tokens": think},
                                                  "cache_read_input_tokens": cr, "cache_creation_input_tokens": cw}}}) + "\n"
+
+    def test_thinking_and_subagents(self):
+        import transcripts as T
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            root, data = Path(a), Path(b)
+            (root / "p").mkdir()
+            (root / "p" / "s.jsonl").write_text(self.line("a", "10", 100, think=40) + self.line("b", "10", 60, think=10, side=True),
+                                                encoding="utf-8")
+            st = T.scan(data, root)
+            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|main"], [2, 100, 0, 0, 1, 40])
+            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|sub"], [2, 60, 0, 0, 1, 10])
+            s = T.summary(st, datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
+            self.assertEqual((s["week"]["thinking"], s["week"]["output"]), (50, 160))
+            self.assertEqual(s["week"]["sub_share"], round(100 * 62 / 164, 1))
+            self.assertEqual(s["days"][0]["agents"]["sub"], [2, 60, 0, 0, 1, 10])
+
+    def test_old_state_layout_is_rebuilt(self):
+        import transcripts as T
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            root, data = Path(a), Path(b)
+            (root / "s.jsonl").write_text(self.line("a", "10", 5), encoding="utf-8")
+            (data / "transcripts_state.json").write_text('{"files": {"s.jsonl": {"offset": 99999, "last": null}}, "buckets": {"x|m": [1]}}')
+            st = T.scan(data, root)                                                  # no "v": dropped, read again from 0
+            self.assertEqual(list(st["buckets"]), ["2026-11-05T10:00:00Z|m1|main"])
 
     def test_dedup_incremental_and_no_content(self):
         import transcripts as T
@@ -352,7 +377,7 @@ class TranscriptsTest(unittest.TestCase):
             f.parent.mkdir()
             f.write_text(self.line("a", "10", 5) + self.line("a", "10", 50, cr=900, cw=100), encoding="utf-8")   # streamed twice
             st = T.scan(data, root)
-            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1"], [2, 50, 900, 100, 1])
+            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|main"], [2, 50, 900, 100, 1, 0])
             with f.open("a", encoding="utf-8") as fh:
                 fh.write(self.line("b", "11", 7))
                 fh.write('{"type": "assistant", "half-written')                       # incomplete last line: left for later
@@ -363,7 +388,7 @@ class TranscriptsTest(unittest.TestCase):
             s = T.summary(st, datetime(2026, 11, 5, 12, tzinfo=timezone.utc), {"2026-11-05": 2.0})
             self.assertEqual(s["week"]["cache_hit"], round(100 * 900 / (4 + 900 + 100), 1))
             self.assertEqual(s["days"][0]["tokens_per_pct"], round((4 + 57 + 100) / 2))
-            self.assertEqual(s["days"][0]["models"]["m1"], [4, 57, 900, 100, 2])
+            self.assertEqual(s["days"][0]["models"]["m1"], [4, 57, 900, 100, 2, 0])
 
 
 if __name__ == "__main__":

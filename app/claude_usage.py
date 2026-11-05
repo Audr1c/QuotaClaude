@@ -276,7 +276,9 @@ def tokens_state(data_dir: Path, rows: list[dict], now: datetime):
     if data_dir.resolve() != DATA_DIR.resolve():
         return None
     try:
+        import importlib
         import transcripts
+        transcripts = importlib.reload(transcripts)      # the poller is long-lived: pick up script updates like it does for this file
         return transcripts.summary(transcripts.scan(data_dir), now, weekly_by_day(rows))
     except Exception as e:                      # unreadable folder, odd file: log the type only, never a line of a transcript
         log(data_dir, f"transcripts: {type(e).__name__}")

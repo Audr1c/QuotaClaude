@@ -110,31 +110,44 @@ window.CU = window.CU || {};
   const modelName = n => n.replace(/^claude-/, "");
   const worked = v => v[0] + v[1] + v[3];                                // input + output + cache writes
   const hit = v => { const tot = v[0] + v[2] + v[3]; return tot > 0 ? 100 * v[2] / tot : null; };
+  const agentColor = n => n === "sub" ? "var(--violet)" : "var(--sage)";
+  const thinkTxt = v => v[1] > 0 ? CU.fmt.pct(100 * v[5] / v[1], 0) : "—";           // thinking is part of the output
   const hitTxt = h => h == null ? "—" : CU.fmt.pct(h, h < 99.5 ? 0 : 1);
   function tokensPlot(m, a, b, span) {
     const tk = m.tokens;
     const cut = span ? new Date(Date.now() - (span / DAY - 1) * DAY).toISOString().slice(0, 10) : "";
     const days = tk.days.filter(d => d.day >= cut).reverse();
-    const agg = {}, tot = [0, 0, 0, 0, 0];
+    const agg = {}, ag = {}, tot = [0, 0, 0, 0, 0, 0];
     let d7 = 0;
     for (const d of days) {
       d7 += d.d7 || 0;
       for (const [n, v] of Object.entries(d.models || {})) {
-        const x = agg[n] || (agg[n] = [0, 0, 0, 0, 0]);
+        const x = agg[n] || (agg[n] = [0, 0, 0, 0, 0, 0]);
         v.forEach((q, i) => { x[i] += q; tot[i] += q; });
+      }
+      for (const [n, v] of Object.entries(d.agents || {})) {
+        const x = ag[n] || (ag[n] = [0, 0, 0, 0, 0, 0]);
+        v.forEach((q, i) => { x[i] += q; });
       }
     }
     const models = Object.entries(agg).filter(x => worked(x[1]) > 0).sort((p, q) => worked(q[1]) - worked(p[1]));
     const all = worked(tot) || 1, top = models.slice(0, 2).map(x => x[0]);
     const share = `<div class="share">${models.map(([n, v]) => `<span style="flex-grow:${worked(v)};background:${modelColor(n)}" title="${modelName(n)} · ${k(worked(v))}"></span>`).join("")}</div>`;
     const mrows = models.map(([n, v]) => `<tr><th><span class="dot" style="color:${modelColor(n)}"></span>${modelName(n)}</th>`
-      + `<td>${CU.fmt.pct(100 * worked(v) / all, 0)}</td><td>${k(worked(v))}</td><td>${k(v[1])}</td><td>${hitTxt(hit(v))}</td><td>${k(v[4])}</td></tr>`).join("");
+      + `<td>${CU.fmt.pct(100 * worked(v) / all, 0)}</td><td>${k(worked(v))}</td><td>${k(v[1])}</td><td>${thinkTxt(v)}</td><td>${hitTxt(hit(v))}</td><td>${k(v[4])}</td></tr>`).join("");
+    const kinds = ["main", "sub"].filter(n => ag[n] && worked(ag[n]) > 0);
+    const ashare = `<div class="share">${kinds.map(n => `<span style="flex-grow:${worked(ag[n])};background:${agentColor(n)}" title="${t("chart.tokens.a." + n)} · ${k(worked(ag[n]))}"></span>`).join("")}</div>`;
+    const arows = kinds.map(n => `<tr><th><span class="dot" style="color:${agentColor(n)}"></span>${t("chart.tokens.a." + n)}</th>`
+      + `<td>${CU.fmt.pct(100 * worked(ag[n]) / all, 0)}</td><td>${k(worked(ag[n]))}</td><td>${k(ag[n][1])}</td><td>${thinkTxt(ag[n])}</td><td>${hitTxt(hit(ag[n]))}</td><td>${k(ag[n][4])}</td></tr>`).join("");
+    const subShare = ag.sub ? 100 * worked(ag.sub) / all : 0;
     const maxDay = Math.max(...days.map(d => Object.values(d.models || {}).reduce((s, v) => s + worked(v), 0)), 1);
     const drows = days.map(d => {
       const ms = Object.entries(d.models || {}).sort((p, q) => worked(q[1]) - worked(p[1])), dw = ms.reduce((s, x) => s + worked(x[1]), 0);
       const bar = ms.map(([n, v]) => `<span style="width:${(worked(v) / maxDay * 100).toFixed(1)}%;background:${modelColor(n)}" title="${modelName(n)} · ${k(worked(v))} · ${t("chart.tokens.c.hit")} ${hitTxt(hit(v))}"></span>`).join("");
       const hits = top.map(n => d.models && d.models[n] ? `<span style="color:${modelColor(n)}">${hitTxt(hit(d.models[n]))}</span>` : "<span>—</span>").join(" ");
+      const sub = d.agents && d.agents.sub ? 100 * worked(d.agents.sub) / (dw || 1) : 0;
       return `<tr><th>${dm(Date.parse(d.day + "T12:00:00Z"))}</th><td><span class="tbar">${bar}</span></td><td>${k(dw)}</td><td class="hits">${hits}</td>`
+        + `<td>${thinkTxt([0, d.output, 0, 0, 0, d.thinking])}</td><td>${sub >= 0.5 ? CU.fmt.pct(sub, 0) : "—"}</td>`
         + `<td>${d.d7 ? CU.fmt.pct(d.d7, 0) : "—"}</td><td>${k(d.tokens_per_pct)}</td></tr>`;
     }).join("");
     const hitHead = top.map(n => `<span style="color:${modelColor(n)}">${modelName(n).split("-")[0]}</span>`).join(" ");
@@ -144,10 +157,17 @@ window.CU = window.CU || {};
           <div><b>${k(worked(tot))}</b><span>${t("chart.tokens.s.fresh")}</span></div>
           <div><b>${k(d7 > 0 ? Math.round(worked(tot) / d7) : null)}</b><span>${t("chart.tokens.s.perpct")}</span></div>
         </div>
+        <div class="stats">
+          <div><b>${thinkTxt(tot)}</b><span>${t("chart.tokens.s.think")}</span></div>
+          <div><b>${CU.fmt.pct(subShare, 0)}</b><span>${t("chart.tokens.s.sub")}</span></div>
+          <div><b>${k(tot[4])}</b><span>${t("chart.tokens.m.msgs")}</span></div>
+        </div>
         <h3 class="sub">${t("chart.tokens.bymodel")}</h3>${share}
-        <table class="eqs tokens"><tr><th></th><td>${t("chart.tokens.m.share")}</td><td>${t("chart.tokens.c.fresh")}</td><td>${t("chart.tokens.m.out")}</td><td>${t("chart.tokens.c.hit")}</td><td>${t("chart.tokens.m.msgs")}</td></tr>${mrows}</table>
+        <table class="eqs tokens"><tr><th></th><td>${t("chart.tokens.m.share")}</td><td>${t("chart.tokens.c.fresh")}</td><td>${t("chart.tokens.m.out")}</td><td>${t("chart.tokens.m.think")}</td><td>${t("chart.tokens.c.hit")}</td><td>${t("chart.tokens.m.msgs")}</td></tr>${mrows}</table>
+        <h3 class="sub">${t("chart.tokens.byagent")}</h3>${ashare}
+        <table class="eqs tokens"><tr><th></th><td>${t("chart.tokens.m.share")}</td><td>${t("chart.tokens.c.fresh")}</td><td>${t("chart.tokens.m.out")}</td><td>${t("chart.tokens.m.think")}</td><td>${t("chart.tokens.c.hit")}</td><td>${t("chart.tokens.m.msgs")}</td></tr>${arows}</table>
         <h3 class="sub">${t("chart.tokens.byday")}</h3>
-        <table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.fresh")}</td><td class="hits">${t("chart.tokens.c.hit")} ${hitHead}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.perpct")}</td></tr>${drows}</table>` };
+        <table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.fresh")}</td><td class="hits">${t("chart.tokens.c.hit")} ${hitHead}</td><td>${t("chart.tokens.m.think")}</td><td>${t("chart.tokens.m.subcol")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.perpct")}</td></tr>${drows}</table>` };
   }
 
   /* ---------- the chart definitions ---------- */
