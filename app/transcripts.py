@@ -14,7 +14,8 @@ ones only what was appended). Claude Code writes the same assistant message seve
 the final numbers in the last copy: consecutive lines with the same `message.id` replace each other.
 Counts go into hourly (UTC) buckets per model and per agent kind ("main" session or "sub" = sub-agent), kept in
 data/transcripts_state.json and exported to data/tokens.csv.
-A bucket is [input, output, cache_read, cache_write, messages, thinking]; `thinking` is part of `output`.
+A bucket is [input, output, cache_read, cache_write, messages, thinking, cache_write_1h]; `thinking` is part of
+`output` and `cache_write_1h` is the part of `cache_write` kept for 1 hour (the rest is the 5-minute cache, cheaper to write).
 """
 from __future__ import annotations
 
@@ -23,9 +24,9 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-FIELDS = ["input", "output", "cache_read", "cache_write", "messages", "thinking"]
+FIELDS = ["input", "output", "cache_read", "cache_write", "messages", "thinking", "cache_write_1h"]
 STATE_NAME, CSV_NAME = "transcripts_state.json", "tokens.csv"
-VERSION = 2                         # bumped when the bucket layout changes: the old state is dropped and rebuilt
+VERSION = 3                         # bumped when the bucket layout changes: the old state is dropped and rebuilt
 
 
 def projects_dir() -> Path:
@@ -47,7 +48,7 @@ def _n(v) -> int:
 
 
 def parse_line(raw: bytes):
-    """(message_id, hour, model, agent, [input, output, cache_read, cache_write, thinking]) or None.
+    """(message_id, hour, model, agent, [input, output, cache_read, cache_write, thinking, cache_write_1h]) or None.
     Reads nothing but those fields."""
     if b'"usage"' not in raw or b'"assistant"' not in raw:       # cheap filter before the JSON parse
         return None
@@ -61,21 +62,24 @@ def parse_line(raw: bytes):
         mid = m.get("id")
         model = m.get("model")
         details = u.get("output_tokens_details")
+        cc = u.get("cache_creation")
         return (mid if isinstance(mid, str) else None, hour, model if isinstance(model, str) else "?",
                 "sub" if d.get("isSidechain") is True else "main",
                 [_n(u.get("input_tokens")), _n(u.get("output_tokens")),
                  _n(u.get("cache_read_input_tokens")), _n(u.get("cache_creation_input_tokens")),
-                 _n(details.get("thinking_tokens")) if isinstance(details, dict) else 0])
+                 _n(details.get("thinking_tokens")) if isinstance(details, dict) else 0,
+                 _n(cc.get("ephemeral_1h_input_tokens")) if isinstance(cc, dict) else 0])
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
 
 
 def _add(buckets: dict, hour: str, model: str, agent: str, vals: list, sign: int = 1) -> None:
-    b = buckets.setdefault(f"{hour}|{model}|{agent}", [0, 0, 0, 0, 0, 0])
+    b = buckets.setdefault(f"{hour}|{model}|{agent}", [0] * 7)
     for i in range(4):
         b[i] += sign * vals[i]
     b[4] += sign
     b[5] += sign * vals[4]
+    b[6] += sign * vals[5]
 
 
 def _split(key: str):
@@ -160,30 +164,30 @@ def _sum(a: list, b: list) -> None:
 
 def summary(st: dict, now: datetime, d7_by_day: dict | None = None, days: int = 120) -> dict:
     """What the widget shows. Per UTC day: totals, per model and per agent kind ("main" / "sub"), with the weekly %
-    of that day. Counters are [input, output, cache_read, cache_write, messages, thinking]."""
+    of that day. Counters are [input, output, cache_read, cache_write, messages, thinking, cache_write_1h]."""
     d7_by_day = d7_by_day or {}
     per_day: dict = {}
     cut7 = (now - timedelta(hours=24 * 7)).strftime("%Y-%m-%dT%H:00:00Z")
-    week = [0] * 6
+    week = [0] * 7
     week_agents: dict = {}
     for k, v in st["buckets"].items():
         hour, model, agent = _split(k)
         day = per_day.setdefault(hour[:10], {"models": {}, "agents": {}})
-        _sum(day["models"].setdefault(model, [0] * 6), v)
-        _sum(day["agents"].setdefault(agent, [0] * 6), v)
+        _sum(day["models"].setdefault(model, [0] * 7), v)
+        _sum(day["agents"].setdefault(agent, [0] * 7), v)
         if hour >= cut7:
             _sum(week, v)
-            _sum(week_agents.setdefault(agent, [0] * 6), v)
+            _sum(week_agents.setdefault(agent, [0] * 7), v)
     out_days = []
     for day in sorted(per_day)[-days:]:
-        tot = [0] * 6
+        tot = [0] * 7
         for v in per_day[day]["models"].values():
             _sum(tot, v)
         d7 = d7_by_day.get(day)
         fresh = tot[0] + tot[1] + tot[3]            # tokens that cost real work (cache reads are nearly free)
         out_days.append({
             "day": day, "input": tot[0], "output": tot[1], "cache_read": tot[2], "cache_write": tot[3], "messages": tot[4],
-            "thinking": tot[5], "cache_hit": cache_hit(tot[0], tot[2], tot[3]), "d7": d7,
+            "thinking": tot[5], "cache_write_1h": tot[6], "cache_hit": cache_hit(tot[0], tot[2], tot[3]), "d7": d7,
             "tokens_per_pct": round(fresh / d7) if d7 and d7 > 0 else None,
             "models": {m: v for m, v in per_day[day]["models"].items() if any(v)},
             "agents": {a: v for a, v in per_day[day]["agents"].items() if any(v)},
@@ -193,7 +197,7 @@ def summary(st: dict, now: datetime, d7_by_day: dict | None = None, days: int = 
     return {
         "days": out_days,
         "week": {"input": week[0], "output": week[1], "cache_read": week[2], "cache_write": week[3], "messages": week[4],
-                 "thinking": week[5], "cache_hit": cache_hit(week[0], week[2], week[3]),
+                 "thinking": week[5], "cache_write_1h": week[6], "cache_hit": cache_hit(week[0], week[2], week[3]),
                  "tokens_per_pct": round(wfresh / wd7) if wd7 > 0 else None,
                  "sub_share": round(100.0 * (week_agents.get("sub", [0, 0, 0, 0])[0] + week_agents.get("sub", [0, 0, 0, 0])[1]
                                              + week_agents.get("sub", [0, 0, 0, 0])[3]) / wfresh, 1) if wfresh else None},

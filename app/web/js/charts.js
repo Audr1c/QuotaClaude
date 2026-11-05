@@ -1,7 +1,7 @@
 /* charts.js: the history charts (plain SVG, no dependency).
      1. usage per hour, in % of the 5-hour window, against the pace you can afford;
      2. evolution of the 5h -> week ratio (how many % of the week one full 5-hour window costs), day by day;
-     3. tokens and cache read from the local transcripts, split by model.
+     3. tokens by type (fresh input, cache write, cache read, output) and their relative cost, from the local transcripts.
    Each chart has a range: preset buttons, and (charts 1 and 2) a small overview below it, like a market chart:
    drag the window to move it, drag its edges to zoom, click outside to jump there. The range is kept in
    localStorage. While a drag is going on, CU.dragging is true and the page does not re-render. */
@@ -105,69 +105,57 @@ window.CU = window.CU || {};
     return { kind: "line", p: pts.map(d => [(d.ms - lo) / (hi - lo), 1 - (d.cum - mn) / (mx - mn)]) };
   }
 
-  /* ---------- 3. tokens and cache, split by model ---------- */
-  const modelColor = n => /opus/i.test(n) ? "var(--clay)" : /sonnet/i.test(n) ? "var(--blue)" : /haiku/i.test(n) ? "var(--sage)" : "var(--muted)";
-  const modelName = n => n.replace(/^claude-/, "");
-  const worked = v => v[0] + v[1] + v[3];                                // input + output + cache writes
-  const hit = v => { const tot = v[0] + v[2] + v[3]; return tot > 0 ? 100 * v[2] / tot : null; };
-  const agentColor = n => n === "sub" ? "var(--violet)" : "var(--sage)";
-  const thinkTxt = v => v[1] > 0 ? CU.fmt.pct(100 * v[5] / v[1], 0) : "—";           // thinking is part of the output
-  const hitTxt = h => h == null ? "—" : CU.fmt.pct(h, h < 99.5 ? 0 : 1);
+  /* ---------- 3. tokens by type, and what each type costs ---------- */
+  /* Relative price of one token of each type, in "plain input tokens" (Anthropic's public price ratios, the same for
+     every model; only the base price changes): cache read 0.1x, cache write 1.25x (5 min) or 2x (1 h), output 5x.
+     It is an API-price proxy: how the quota itself weights each type is not published. */
+  const PRICE = { input: 1, write5: 1.25, write1: 2, read: 0.1, output: 5 };
+  function tokenTypes(x) {                     // x: { input, output, cache_read, cache_write, cache_write_1h }
+    const w1 = Math.min(x.cache_write_1h || 0, x.cache_write), w5 = x.cache_write - w1;
+    return [
+      { id: "input", n: x.input, cost: x.input * PRICE.input, color: "var(--blue)" },
+      { id: "write", n: x.cache_write, cost: w5 * PRICE.write5 + w1 * PRICE.write1, color: "var(--violet)" },
+      { id: "read", n: x.cache_read, cost: x.cache_read * PRICE.read, color: "var(--sage)" },
+      { id: "output", n: x.output, cost: x.output * PRICE.output, color: "var(--clay)" },
+    ];
+  }
+  const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+  const pc = (v, tot) => tot > 0 ? CU.fmt.pct(100 * v / tot, v / tot < 0.1 ? 1 : 0) : "—";
+  const times = v => "× " + CU.fmt.num(v, v < 1 ? 1 : v % 1 ? 2 : 0);
+  const stack = (types, key, tot, label) => `<div class="share">${types.map(x => x[key] > 0 ?
+    `<span style="flex-grow:${x[key]};background:${x.color}" title="${t("chart.tokens.t." + x.id)} · ${pc(x[key], tot)} ${label}"></span>` : "").join("")}</div>`;
+
   function tokensPlot(m, a, b, span) {
-    const tk = m.tokens;
     const cut = span ? new Date(Date.now() - (span / DAY - 1) * DAY).toISOString().slice(0, 10) : "";
-    const days = tk.days.filter(d => d.day >= cut).reverse();
-    const agg = {}, ag = {}, tot = [0, 0, 0, 0, 0, 0];
+    const days = m.tokens.days.filter(d => d.day >= cut).reverse();
+    const tot = { input: 0, output: 0, cache_read: 0, cache_write: 0, cache_write_1h: 0 };
     let d7 = 0;
-    for (const d of days) {
-      d7 += d.d7 || 0;
-      for (const [n, v] of Object.entries(d.models || {})) {
-        const x = agg[n] || (agg[n] = [0, 0, 0, 0, 0, 0]);
-        v.forEach((q, i) => { x[i] += q; tot[i] += q; });
-      }
-      for (const [n, v] of Object.entries(d.agents || {})) {
-        const x = ag[n] || (ag[n] = [0, 0, 0, 0, 0, 0]);
-        v.forEach((q, i) => { x[i] += q; });
-      }
-    }
-    const models = Object.entries(agg).filter(x => worked(x[1]) > 0).sort((p, q) => worked(q[1]) - worked(p[1]));
-    const all = worked(tot) || 1, top = models.slice(0, 2).map(x => x[0]);
-    const share = `<div class="share">${models.map(([n, v]) => `<span style="flex-grow:${worked(v)};background:${modelColor(n)}" title="${modelName(n)} · ${k(worked(v))}"></span>`).join("")}</div>`;
-    const mrows = models.map(([n, v]) => `<tr><th><span class="dot" style="color:${modelColor(n)}"></span>${modelName(n)}</th>`
-      + `<td>${CU.fmt.pct(100 * worked(v) / all, 0)}</td><td>${k(worked(v))}</td><td>${k(v[1])}</td><td>${thinkTxt(v)}</td><td>${hitTxt(hit(v))}</td><td>${k(v[4])}</td></tr>`).join("");
-    const kinds = ["main", "sub"].filter(n => ag[n] && worked(ag[n]) > 0);
-    const ashare = `<div class="share">${kinds.map(n => `<span style="flex-grow:${worked(ag[n])};background:${agentColor(n)}" title="${t("chart.tokens.a." + n)} · ${k(worked(ag[n]))}"></span>`).join("")}</div>`;
-    const arows = kinds.map(n => `<tr><th><span class="dot" style="color:${agentColor(n)}"></span>${t("chart.tokens.a." + n)}</th>`
-      + `<td>${CU.fmt.pct(100 * worked(ag[n]) / all, 0)}</td><td>${k(worked(ag[n]))}</td><td>${k(ag[n][1])}</td><td>${thinkTxt(ag[n])}</td><td>${hitTxt(hit(ag[n]))}</td><td>${k(ag[n][4])}</td></tr>`).join("");
-    const subShare = ag.sub ? 100 * worked(ag.sub) / all : 0;
-    const maxDay = Math.max(...days.map(d => Object.values(d.models || {}).reduce((s, v) => s + worked(v), 0)), 1);
+    for (const d of days) { for (const q in tot) tot[q] += d[q] || 0; d7 += d.d7 || 0; }
+    const types = tokenTypes(tot), all = sum(types, x => x.n), cost = sum(types, x => x.cost);
+    const noCache = (tot.input + tot.cache_read + tot.cache_write) * PRICE.input + tot.output * PRICE.output;
+    const saving = noCache > 0 ? 100 * (1 - cost / noCache) : null;
+    const prompt = tot.input + tot.cache_read + tot.cache_write;
+    const rows = types.map(x => `<tr><th><span class="dot" style="color:${x.color}"></span>${t("chart.tokens.t." + x.id)}<small>${t("chart.tokens.d." + x.id)}</small></th>`
+      + `<td>${k(x.n)}</td><td>${pc(x.n, all)}</td><td>${x.n > 0 ? times(x.cost / x.n) : "—"}</td><td><b>${pc(x.cost, cost)}</b></td></tr>`).join("");
+    const maxCost = Math.max(...days.map(d => sum(tokenTypes(d), x => x.cost)), 1);
     const drows = days.map(d => {
-      const ms = Object.entries(d.models || {}).sort((p, q) => worked(q[1]) - worked(p[1])), dw = ms.reduce((s, x) => s + worked(x[1]), 0);
-      const bar = ms.map(([n, v]) => `<span style="width:${(worked(v) / maxDay * 100).toFixed(1)}%;background:${modelColor(n)}" title="${modelName(n)} · ${k(worked(v))} · ${t("chart.tokens.c.hit")} ${hitTxt(hit(v))}"></span>`).join("");
-      const hits = top.map(n => d.models && d.models[n] ? `<span style="color:${modelColor(n)}">${hitTxt(hit(d.models[n]))}</span>` : "<span>—</span>").join(" ");
-      const sub = d.agents && d.agents.sub ? 100 * worked(d.agents.sub) / (dw || 1) : 0;
-      return `<tr><th>${dm(Date.parse(d.day + "T12:00:00Z"))}</th><td><span class="tbar">${bar}</span></td><td>${k(dw)}</td><td class="hits">${hits}</td>`
-        + `<td>${thinkTxt([0, d.output, 0, 0, 0, d.thinking])}</td><td>${sub >= 0.5 ? CU.fmt.pct(sub, 0) : "—"}</td>`
-        + `<td>${d.d7 ? CU.fmt.pct(d.d7, 0) : "—"}</td><td>${k(d.tokens_per_pct)}</td></tr>`;
+      const ty = tokenTypes(d), n = sum(ty, x => x.n), c = sum(ty, x => x.cost);
+      const bar = ty.map(x => `<span style="width:${(x.cost / maxCost * 100).toFixed(1)}%;background:${x.color}" title="${t("chart.tokens.t." + x.id)} · ${k(x.n)} · ${pc(x.cost, c)} ${t("chart.tokens.ofcost")}"></span>`).join("");
+      return `<tr><th>${dm(Date.parse(d.day + "T12:00:00Z"))}</th><td><span class="tbar">${bar}</span></td><td>${k(n)}</td>`
+        + `<td>${pc(d.cache_read, n)}</td><td>${k(c)}</td><td>${d.d7 ? CU.fmt.pct(d.d7, 0) : "—"}</td><td>${d.d7 ? k(c / d.d7) : "—"}</td></tr>`;
     }).join("");
-    const hitHead = top.map(n => `<span style="color:${modelColor(n)}">${modelName(n).split("-")[0]}</span>`).join(" ");
     return { svg: `
         <div class="stats">
-          <div><b>${hitTxt(hit(tot))}</b><span>${t("chart.tokens.s.hit")}</span></div>
-          <div><b>${k(worked(tot))}</b><span>${t("chart.tokens.s.fresh")}</span></div>
-          <div><b>${k(d7 > 0 ? Math.round(worked(tot) / d7) : null)}</b><span>${t("chart.tokens.s.perpct")}</span></div>
+          <div><b>${k(all)}</b><span>${t("chart.tokens.s.total")}</span></div>
+          <div><b>${pc(tot.cache_read, all)}</b><span>${t("chart.tokens.s.cached", { n: k(tot.cache_read) })}</span></div>
+          <div><b>${saving == null ? "—" : "−" + CU.fmt.pct(saving, 0)}</b><span>${t("chart.tokens.s.saving")}</span></div>
         </div>
-        <div class="stats">
-          <div><b>${thinkTxt(tot)}</b><span>${t("chart.tokens.s.think")}</span></div>
-          <div><b>${CU.fmt.pct(subShare, 0)}</b><span>${t("chart.tokens.s.sub")}</span></div>
-          <div><b>${k(tot[4])}</b><span>${t("chart.tokens.m.msgs")}</span></div>
-        </div>
-        <h3 class="sub">${t("chart.tokens.bymodel")}</h3>${share}
-        <table class="eqs tokens"><tr><th></th><td>${t("chart.tokens.m.share")}</td><td>${t("chart.tokens.c.fresh")}</td><td>${t("chart.tokens.m.out")}</td><td>${t("chart.tokens.m.think")}</td><td>${t("chart.tokens.c.hit")}</td><td>${t("chart.tokens.m.msgs")}</td></tr>${mrows}</table>
-        <h3 class="sub">${t("chart.tokens.byagent")}</h3>${ashare}
-        <table class="eqs tokens"><tr><th></th><td>${t("chart.tokens.m.share")}</td><td>${t("chart.tokens.c.fresh")}</td><td>${t("chart.tokens.m.out")}</td><td>${t("chart.tokens.m.think")}</td><td>${t("chart.tokens.c.hit")}</td><td>${t("chart.tokens.m.msgs")}</td></tr>${arows}</table>
+        <h3 class="sub">${t("chart.tokens.h.tokens")}</h3>${stack(types, "n", all, t("chart.tokens.oftokens"))}
+        <h3 class="sub">${t("chart.tokens.h.cost")}</h3>${stack(types, "cost", cost, t("chart.tokens.ofcost"))}
+        <table class="eqs tokens types"><tr><th></th><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.pctt")}</td><td>${t("chart.tokens.c.price")}</td><td>${t("chart.tokens.c.pctc")}</td></tr>${rows}</table>
+        <p class="note">${t("chart.tokens.hitnote", { hit: CU.fmt.pct(prompt ? 100 * tot.cache_read / prompt : 0, 0), prompt: k(prompt), cached: k(tot.cache_read) })}</p>
         <h3 class="sub">${t("chart.tokens.byday")}</h3>
-        <table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.fresh")}</td><td class="hits">${t("chart.tokens.c.hit")} ${hitHead}</td><td>${t("chart.tokens.m.think")}</td><td>${t("chart.tokens.m.subcol")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.perpct")}</td></tr>${drows}</table>` };
+        <table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.cache")}</td><td>${t("chart.tokens.c.cost")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.costpct")}</td></tr>${drows}</table>` };
   }
 
   /* ---------- the chart definitions ---------- */
@@ -195,7 +183,8 @@ window.CU = window.CU || {};
       ready: m => m.tokens && m.tokens.days.length, noMini: true, title: "chart.tokens.title",
       domain: () => { const hi = Date.now(); return [hi - DAY, hi]; },
       plot: (m, a, b, s) => tokensPlot(m, a, b, s.span),
-      label: () => "", hint: m => t("chart.tokens.hit", { n: hitTxt(m.tokens.week.cache_hit) }), note: () => t("chart.tokens.note"), legend: () => "",
+      label: () => "", hint: m => { const w = m.tokens.week, all = w.input + w.output + w.cache_read + w.cache_write;
+        return t("chart.tokens.hit", { n: pc(w.cache_read, all) }); }, note: () => t("chart.tokens.note"), legend: () => "",
     },
   };
 

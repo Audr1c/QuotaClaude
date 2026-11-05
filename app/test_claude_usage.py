@@ -353,12 +353,19 @@ class TranscriptsTest(unittest.TestCase):
             (root / "p" / "s.jsonl").write_text(self.line("a", "10", 100, think=40) + self.line("b", "10", 60, think=10, side=True),
                                                 encoding="utf-8")
             st = T.scan(data, root)
-            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|main"], [2, 100, 0, 0, 1, 40])
-            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|sub"], [2, 60, 0, 0, 1, 10])
+            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|main"], [2, 100, 0, 0, 1, 40, 0])
+            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|sub"], [2, 60, 0, 0, 1, 10, 0])
             s = T.summary(st, datetime(2026, 11, 5, 12, tzinfo=timezone.utc))
             self.assertEqual((s["week"]["thinking"], s["week"]["output"]), (50, 160))
             self.assertEqual(s["week"]["sub_share"], round(100 * 62 / 164, 1))
-            self.assertEqual(s["days"][0]["agents"]["sub"], [2, 60, 0, 0, 1, 10])
+            self.assertEqual(s["days"][0]["agents"]["sub"], [2, 60, 0, 0, 1, 10, 0])
+
+    def test_cache_write_split_5m_1h(self):
+        import transcripts as T
+        raw = json.dumps({"type": "assistant", "timestamp": "2026-11-05T10:10:00.000Z", "message": {"id": "z", "model": "m1", "usage": {
+            "input_tokens": 1, "output_tokens": 2, "cache_read_input_tokens": 3, "cache_creation_input_tokens": 100,
+            "cache_creation": {"ephemeral_1h_input_tokens": 70, "ephemeral_5m_input_tokens": 30}}}}).encode()
+        self.assertEqual(T.parse_line(raw)[4], [1, 2, 3, 100, 0, 70])
 
     def test_old_state_layout_is_rebuilt(self):
         import transcripts as T
@@ -377,7 +384,7 @@ class TranscriptsTest(unittest.TestCase):
             f.parent.mkdir()
             f.write_text(self.line("a", "10", 5) + self.line("a", "10", 50, cr=900, cw=100), encoding="utf-8")   # streamed twice
             st = T.scan(data, root)
-            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|main"], [2, 50, 900, 100, 1, 0])
+            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1|main"], [2, 50, 900, 100, 1, 0, 0])
             with f.open("a", encoding="utf-8") as fh:
                 fh.write(self.line("b", "11", 7))
                 fh.write('{"type": "assistant", "half-written')                       # incomplete last line: left for later
@@ -388,7 +395,7 @@ class TranscriptsTest(unittest.TestCase):
             s = T.summary(st, datetime(2026, 11, 5, 12, tzinfo=timezone.utc), {"2026-11-05": 2.0})
             self.assertEqual(s["week"]["cache_hit"], round(100 * 900 / (4 + 900 + 100), 1))
             self.assertEqual(s["days"][0]["tokens_per_pct"], round((4 + 57 + 100) / 2))
-            self.assertEqual(s["days"][0]["models"]["m1"], [4, 57, 900, 100, 2, 0])
+            self.assertEqual(s["days"][0]["models"]["m1"], [4, 57, 900, 100, 2, 0, 0])
 
 
 if __name__ == "__main__":

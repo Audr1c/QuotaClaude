@@ -205,3 +205,6 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .tbar span { display: block; height: 100%; }
 .share { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--track); margin-bottom: 6px; }
 .share span { display: block; min-width: 2px; }
+.eqs.tokens small { display: block; margin-left: 16px; font-weight: 400; font-size: 11px; color: var(--muted); white-space: normal; }
+.eqs.tokens.types th { white-space: normal; }
+.eqs.tokens.types td:nth-child(n+2) { text-align: right; }
