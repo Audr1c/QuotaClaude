@@ -23,3 +23,6 @@ desktop.ini
 
 # --- Repos externes clonés pour analyse (idée 7) ---
 repos-externes/
+
+# Local audit reports (they quote paths and project names of the machine)
+AUDIT-*.md

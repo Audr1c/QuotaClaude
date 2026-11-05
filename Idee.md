@@ -127,7 +127,7 @@ Pistes d'évolution de Claude Usage Tracker. Contraintes communes : l'endpoint `
 
 ## Statut des idées 5 à 7 (branche `feature/graphiques-historique`)
 
-- **5 (usage par heure)** : fait, graphique « Usage par heure (24 dernières heures) » (`app/web/js/charts.js`, `CU.hourly` dans `model.js`).
+- **5 (usage par heure)** : fait, graphique « Usage par heure » avec plage réglable et mini-vue (`app/web/js/charts.js`).
 - **6 (évolution du ratio 5 h → semaine)** : fait, série quotidienne `ratio_daily` calculée sur tout `usage.csv` (`claude_usage.py`), tracée dans le même fichier.
 - **7 (autres dépôts)** : 5 dépôts clonés dans `repos-externes/` (ignoré par Git) avec une analyse `ANALYSE-*.md` chacun et une `SYNTHESE.md`.
 
@@ -136,4 +136,9 @@ Pistes d'évolution de Claude Usage Tracker. Contraintes communes : l'endpoint `
 2. **Taux de cache hit** = `cache_read / (cache_read + cache_creation + input)`. Effort S une fois le lecteur écrit.
 3. **Tokens par % de quota** : croiser `tokens.csv` et `usage.csv` pour remplacer le ratio estimé par une valeur mesurée. Effort M à L.
 4. Tokens par jour / modèle / projet, coût équivalent API (tarifs dans un fichier de config). Effort M.
-- À faire après l'audit de sécurité du serveur : ne jamais exposer les transcripts via `server.py`.
+- Ne jamais exposer les transcripts via `server.py` (vérifié : seuls `latest.json`, `latest.js` et `poller.json` sont servis).
+
+### Audit de la 1.1.0 et corrections de la 1.1.1
+Un audit complet de la 1.1.0 (rapport local `AUDIT-1.1.0.md`, non versionné car il cite des chemins et noms de projets de la machine) a couvert la sécurité du serveur et les ressources listées plus haut.
+Corrigé en 1.1.1 : double comptage des messages (id déjà vu ailleurs), noms de projets dans `transcripts_state.json` (maintenant hachés), chemin UNC et lecture inter-sites de `/data/` (contrôle `Sec-Fetch-Site`), `POST /api/refresh` sans Origin et sans limite (Origin obligatoire, un seul vrai relevé toutes les 20 s), en-têtes CSP / nosniff / frame, nom de compte dans les diagnostics, `r.name` non échappé, graphique horaire tronqué après 400 barres, clavier et focus de la mini-vue, état corrompu qui désactivait le panneau Tokens, test live désormais opt-in (`CLAUDE_USAGE_LIVE=1`).
+Reste à faire (mineur) : relecture complète de `usage.csv` à chaque relevé et volume d'écriture dans `data/` (surtout si le dossier est synchronisé), réveil toutes les 5 s du poller, pause du widget onglet caché, palier de 30 s du poller, premier relevé d'une nouvelle fenêtre de 5 h non compté, jours UTC contre heures locales, année absente des libellés de plage, mobile et contraste du bleu, verrou entre processus (serveur et poller), tests JavaScript plus larges.

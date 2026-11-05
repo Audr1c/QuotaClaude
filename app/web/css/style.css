@@ -208,3 +208,4 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .eqs.tokens small { display: block; margin-left: 16px; font-weight: 400; font-size: 11px; color: var(--muted); white-space: normal; }
 .eqs.tokens.types th { white-space: normal; }
 .eqs.tokens.types td:nth-child(n+2) { text-align: right; }
+.chart svg.mini:focus-visible { outline: 2px solid var(--blue-ink); outline-offset: 2px; }

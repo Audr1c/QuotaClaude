@@ -105,6 +105,13 @@ RENEW_HINT = ("Run `claude` once in a terminal: it renews the token (the Claude 
               "to update this file). The next reading then starts by itself.")
 
 
+def display_path(p) -> str:
+    """A path for messages and for latest.json (which the widget serves): the home folder is shown as ~,
+    so the account name does not travel with the diagnostics."""
+    s, home = str(p), str(Path.home())
+    return "~" + s[len(home):] if s.lower().startswith(home.lower()) else s
+
+
 def credentials_path() -> Path:
     base = Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else Path.home() / ".claude"
     return base / ".credentials.json"
@@ -130,13 +137,13 @@ def read_token(now: datetime | None = None) -> str:
     if not path.exists():
         raise TrackerError(
             "no_credentials",
-            f"Claude Code credentials not found ({path}). "
+            f"Claude Code credentials not found ({display_path(path)}). "
             "Open Claude Code and sign in (/login) with your Claude subscription.",
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        raise TrackerError("bad_credentials", f"Cannot read {path}: {e}")
+        raise TrackerError("bad_credentials", f"Cannot read {display_path(path)}: {type(e).__name__}")
     token = (data.get("claudeAiOauth") or {}).get("accessToken")
     if not token:
         raise TrackerError(
@@ -146,7 +153,7 @@ def read_token(now: datetime | None = None) -> str:
     expires = token_expiry()
     if expires and expires <= (now or now_utc()):
         raise TrackerError("token_expired", f"The Claude Code token expired at {iso(expires)}. " + RENEW_HINT,
-                           {"expires_at": iso(expires), "path": str(path)})
+                           {"expires_at": iso(expires), "path": display_path(path)})
     return token
 
 
@@ -344,7 +351,7 @@ def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")      # own name: the poller and the server never share a temp file
     tmp.write_text(text, encoding="utf-8")
     for attempt in range(20):
         try:
@@ -563,6 +570,7 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
         "token_expires_at": iso(token_expiry()) or None,
     }
     text = json.dumps(state, ensure_ascii=False, indent=1)
+    text = text.replace(json.dumps(str(Path.home()))[1:-1], "~")     # no account name in what the widget server hands out
     _atomic_write(data_dir / "latest.json", text)
     _atomic_write(data_dir / "latest.js", "window.CLAUDE_USAGE = " + text + ";\n")
     return state
@@ -599,7 +607,7 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
         except PermissionError:
             raise TrackerError("file_locked", "Cannot write data/usage.csv: it is open in another program "
                                               "(Excel, LibreOffice...). Close it; the next reading retries.",
-                               {"path": str(data_dir / "usage.csv")})
+                               {"path": display_path(data_dir / "usage.csv")})
         breakdown = extract_breakdown(payload)
         if breakdown:
             try:

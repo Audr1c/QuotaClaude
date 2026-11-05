@@ -33,14 +33,14 @@ window.CU = window.CU || {};
   }
 
   /* ---------- 1. usage per hour ---------- */
-  const bucketHours = n => n <= 48 ? 1 : n <= 96 ? 3 : n <= 240 ? 6 : 24;
+  const bucketHours = n => n <= 48 ? 1 : n <= 96 ? 3 : n <= 240 ? 6 : n <= 24 * 400 ? 24 : 168;   // never more than ~400 bars
   function bucketStart(ms, bh) {
     const d = new Date(ms);
     if (bh >= 24) d.setHours(0, 0, 0, 0); else d.setHours(Math.floor(d.getHours() / bh) * bh, 0, 0, 0);
     return d.getTime();
   }
   function nextStart(s, bh) {
-    const n = bucketStart(s + (bh >= 24 ? 30 * H : bh * H + H / 2), bh);
+    const n = bucketStart(s + (bh >= 24 ? bh * H + 6 * H : bh * H + H / 2), bh);
     return n > s ? n : s + bh * H;                                     // DST: never loop
   }
   const hourlyDomain = m => {
@@ -49,10 +49,12 @@ window.CU = window.CU || {};
   };
   function hourlyBuckets(m, a, b) {
     const bh = bucketHours((b - a) / H), out = [];
-    for (let s = bucketStart(a, bh); s < b && out.length < 400; ) { const e = nextStart(s, bh); out.push({ t: s, e, v: 0 }); s = e; }
+    for (let s = bucketStart(a, bh); s < b && out.length < 1200; ) { const e = nextStart(s, bh); out.push({ t: s, e, v: 0 }); s = e; }
+    let j = 0;                                                         // hourly5 is sorted by time: one pass
     for (const [iso, v] of m.hourly5) {
-      const ts = Date.parse(iso), bk = out.find(x => ts >= x.t && ts < x.e);
-      if (bk) bk.v += v;
+      const ts = Date.parse(iso);
+      while (j < out.length && ts >= out[j].e) j++;
+      if (j < out.length && ts >= out[j].t) out[j].v += v;
     }
     return { bh, bars: out };
   }
@@ -65,7 +67,7 @@ window.CU = window.CU || {};
       grid += `<line x1="${L}" x2="${W - R}" y1="${f(y(v))}" y2="${f(y(v))}" stroke="var(--line)"/><text x="${L - 6}" y="${f(y(v) + 4)}" text-anchor="end" class="ax">${Math.round(v * 10) / 10}</text>`;
     const body = bars.map((d, i) => {
       const x = L + i * bw, hr = new Date(d.t).getHours(), over = rate != null && d.v > rate;
-      const show = bh === 1 || bh === 24 ? i % stride === 0 : hr === 0;            // 3 h / 6 h bars: label each midnight
+      const show = bh === 1 || bh >= 24 ? i % stride === 0 : hr === 0;             // 3 h / 6 h bars: label each midnight
       const lbl = !show ? "" : `<text x="${f(x + bw / 2)}" y="${HT - 8}" text-anchor="middle" class="ax">${bh < 24 && hr !== 0 ? hr + " h" : dm(d.t)}</text>`;
       return `<rect x="${f(x + 1.5)}" y="${f(y(d.v))}" width="${f(Math.max(bw - 3, 1))}" height="${f(Math.max(HT - B - y(d.v), 0))}" rx="2" fill="${over ? "var(--clay)" : "var(--blue)"}">`
         + `<title>${bh < 24 ? dmh(d.t) : dm(d.t)} · ${CU.fmt.pct(d.v, 1)}</title></rect>${lbl}`;
@@ -164,7 +166,7 @@ window.CU = window.CU || {};
     hourly: {
       key: "hourly", span: DAY, minSpan: 6 * H, presets: [P("24h", DAY), P("3d", 3 * DAY), P("7d", 7 * DAY), P("14d", 14 * DAY), P("all", 0)],
       ready: m => m.hourly5 && m.hourly5.length, domain: hourlyDomain, mini: hourlyMini, plot: hourlyPlot,
-      label: (r, a, b) => `${dmh(a)} → ${dmh(b)} · ${r.bh < 24 ? t("chart.bucket.h", { n: r.bh }) : t("chart.bucket.d")} · ${t("chart.hourly.total", { n: CU.fmt.pct(r.total) })}`,
+      label: (r, a, b) => `${dmh(a)} → ${dmh(b)} · ${r.bh < 24 ? t("chart.bucket.h", { n: r.bh }) : r.bh >= 168 ? t("chart.bucket.w") : t("chart.bucket.d")} · ${t("chart.hourly.total", { n: CU.fmt.pct(r.total) })}`,
       hint: (m, r) => t("chart.hourly.total", { n: CU.fmt.pct(r.total) }),
       note: m => t("chart.hourly.note", { rate: CU.fmt.pct(m.five.paceRate, 1) }),
       legend: () => "", title: "chart.hourly.title",
@@ -220,14 +222,15 @@ window.CU = window.CU || {};
     const buttons = def.presets.map(([key, ms]) =>
       `<button type="button" data-span="${ms}" aria-pressed="${pressed(def, ms, p.s.span, p.lo, p.hi, p.a, p.b)}">${t("range." + key)}</button>`).join("");
     const mini = def.noMini ? "" : `
-        <svg class="mini" viewBox="0 0 ${W} ${MH}" aria-label="${t("chart.range.hint")}">${miniBody(def, m, p.lo, p.hi)}
+        <svg class="mini" viewBox="0 0 ${W} ${MH}" tabindex="0" role="slider" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="50" aria-valuetext="${p.label}" aria-label="${t("chart.range.aria")}">${miniBody(def, m, p.lo, p.hi)}
           <rect class="dim dl" y="0" height="${MH}"/><rect class="dim dr" y="0" height="${MH}"/>
           <rect class="win" y="0.5" height="${MH - 1}" rx="3"/><rect class="hdl hl" y="${MH / 2 - 10}" width="6" height="20" rx="2"/><rect class="hdl hr" y="${MH / 2 - 10}" width="6" height="20" rx="2"/>
         </svg>`;
     const html = `
       <details class="card chart" data-key="${def.key}">
         <summary><h2>${t(def.title)}</h2><span class="hint">${def.hint(m, p.r)}</span></summary>
-        <div class="presets seg" role="group">${buttons}</div>
+        <div class="presets seg" role="group" aria-label="${t(def.title)}">${buttons}</div>
         ${def.key === "tokens" ? `<div class="plot">${p.r.svg}</div>` : `<svg class="plot" viewBox="0 0 ${W} ${HT}" role="img" aria-label="${t(def.title)}">${p.r.svg}</svg>`}
         ${mini}
         <p class="rlabel">${p.label}${def.noMini ? "" : ` <span>${t("chart.range.hint")}</span>`}</p>
@@ -248,7 +251,11 @@ window.CU = window.CU || {};
     el.querySelector("summary .hint").innerHTML = def.hint(m, p.r);
     el.querySelectorAll(".presets button").forEach(b => b.setAttribute("aria-pressed", String(pressed(def, +b.dataset.span, p.s.span, p.lo, p.hi, p.a, p.b))));
     const svg = el.querySelector("svg.mini");
-    if (svg) place(svg, p.lo, p.hi, p.a, p.b);
+    if (svg) { place(svg, p.lo, p.hi, p.a, p.b); aria(svg, p); }
+  }
+  function aria(svg, p) {                                              // what a screen reader says about the window
+    svg.setAttribute("aria-valuenow", String(Math.round(((p.a + p.b) / 2 - p.lo) / (p.hi - p.lo) * 100)));
+    svg.setAttribute("aria-valuetext", p.label);
   }
 
   CU.charts = function (m) {
@@ -256,13 +263,54 @@ window.CU = window.CU || {};
     const html = Object.values(DEFS).filter(d => d.ready(m)).map(d => card(d, m)).join("");
     return html;
   };
+  CU.charts.internals = { hourlyBuckets, bucketHours };                 // for the tests (test_audit.py)
   CU.chartsAfterRender = function (root) {                              // window rectangles need the overview to exist
     const m = CU.lastModel;
     root.querySelectorAll(".chart").forEach(el => {
       const def = DEFS[el.dataset.key], svg = el.querySelector("svg.mini");
-      if (def && svg && m) { const p = parts(def, m); place(svg, p.lo, p.hi, p.a, p.b); }
+      if (def && svg && m) { const p = parts(def, m); place(svg, p.lo, p.hi, p.a, p.b); aria(svg, p); }
     });
   };
+
+  /* The page is rebuilt every 10 s: keep the keyboard focus on the same control (mini view, range button, title). */
+  CU.captureFocus = function (root) {
+    const a = document.activeElement, el = a && a.closest && root.contains(a) ? a.closest(".chart") : null;
+    if (!el) return () => {};
+    const key = el.dataset.key;
+    let sel = null;
+    if (a.matches("svg.mini")) sel = "svg.mini";
+    else if (a.matches("summary")) sel = "summary";
+    else if (a.matches(".presets button")) sel = `.presets button:nth-child(${[...a.parentNode.children].indexOf(a) + 1})`;
+    return () => {
+      const n = sel && root.querySelector(`.chart[data-key="${key}"] ${sel}`);
+      if (n) n.focus({ preventScroll: true });
+    };
+  };
+
+  /* keyboard on the overview: arrows move the window, up/down (or + / -) zoom, Home / End jump to the start / the present */
+  document.addEventListener("keydown", e => {
+    const svg = e.target.closest && e.target.closest("svg.mini");
+    if (!svg || !CU.lastModel) return;
+    const el = svg.closest(".chart"), def = DEFS[el.dataset.key], s = state(def);
+    const [lo, hi] = def.domain(CU.lastModel), [a, b] = win(s, lo, hi, def.minSpan);
+    const span = b - a, step = Math.max(def.key === "hourly" ? H : DAY, span / 10), c = (a + b) / 2;
+    let na = a, nb = b;
+    switch (e.key) {
+      case "ArrowLeft": na -= step; nb -= step; break;
+      case "ArrowRight": na += step; nb += step; break;
+      case "ArrowUp": case "+": { const sp = Math.max(def.minSpan, span * 0.7); na = c - sp / 2; nb = c + sp / 2; break; }
+      case "ArrowDown": case "-": { const sp = Math.min(hi - lo, span / 0.7); na = c - sp / 2; nb = c + sp / 2; break; }
+      case "Home": na = lo; nb = lo + span; break;
+      case "End": nb = hi; na = hi - span; break;
+      default: return;
+    }
+    e.preventDefault();
+    const sp = Math.min(nb - na, hi - lo);
+    if (na < lo) { na = lo; nb = lo + sp; }
+    if (nb > hi) { nb = hi; na = hi - sp; }
+    s.span = nb - na; s.end = nb >= hi - (hi - lo) * 0.004 ? null : nb;
+    save(); refresh(el);
+  });
 
   /* ---------- interaction (delegated: the page is re-rendered often) ---------- */
   let drag = null;

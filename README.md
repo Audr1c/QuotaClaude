@@ -107,7 +107,7 @@ Everything stays in the `app/data/` folder next to the code (git-ignored, create
 | `latest.json` / `latest.js` | latest state + recent history (only readings where values changed, plus the last one), read by the widget |
 | `breakdown.csv` | per-product weekly shares, one line per product each time they change; used to split the breakdown bars by day |
 | `tokens.csv` | token counters per hour, model and agent kind (main / sub-agent), read from Claude Code's transcripts (numbers only) |
-| `transcripts_state.json` | where the transcript reader stopped in each file, and its hourly counters |
+| `transcripts_state.json` | where the transcript reader stopped in each file (files are identified by a hash, never by name), the message ids already counted, and its hourly counters |
 | `poller.json` | poller state: time of the next reading, current step |
 | `poller.lock` | lock so that only one poller runs at a time |
 | `last_response.json` | raw API answer of the last reading (debugging) |
@@ -178,7 +178,7 @@ app/                        everything else
 - No data leaves your machine except the request to Anthropic's API with your own token.
 - The token is read at run time and never copied or logged. `app/data/` and credentials are in `.gitignore`.
 - The server only listens on `127.0.0.1`.
-- Claude Code's transcripts contain your conversations. `transcripts.py` reads only token numbers, the model, the time, the message id and the sub-agent flag from them, and writes only counters (`tokens.csv`); never the text.
+- Claude Code's transcripts contain your conversations. `transcripts.py` reads only token numbers, the model, the time, the message id and the sub-agent flag from them, and writes only counters and message ids (random strings from the API); never the text, and no project or folder name (transcript files are identified by a hash). Each message is counted once, even when a resumed session or a sub-agent file repeats it.
 
 ## Notes
 

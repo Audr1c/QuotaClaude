@@ -107,7 +107,7 @@ Tout reste dans le dossier `app/data/` à côté du code (ignoré par git, cré�
 | `latest.json` / `latest.js` | dernier état + historique récent (seulement les relevés où les valeurs ont changé, plus le dernier), lus par le widget |
 | `breakdown.csv` | parts hebdo par produit, une ligne par produit à chaque changement ; sert à découper les barres de répartition par jour |
 | `tokens.csv` | compteurs de tokens par heure, modèle et type d'agent (principal / sous-agent), lus dans les transcripts de Claude Code (nombres seulement) |
-| `transcripts_state.json` | où le lecteur de transcripts s'est arrêté dans chaque fichier, et ses compteurs horaires |
+| `transcripts_state.json` | où le lecteur de transcripts s'est arrêté dans chaque fichier (les fichiers sont identifiés par un hachage, jamais par leur nom), les identifiants de messages déjà comptés, et ses compteurs horaires |
 | `poller.json` | état du poller : heure du prochain relevé, palier actuel |
 | `poller.lock` | verrou pour qu'un seul poller tourne à la fois |
 | `last_response.json` | réponse brute de l'API au dernier relevé (débogage) |
@@ -178,7 +178,7 @@ app/                        tout le reste
 - Aucune donnée ne quitte ta machine, hormis la requête vers l'API d'Anthropic avec ton propre jeton.
 - Le jeton est lu à l'exécution, jamais copié ni journalisé. `app/data/` et les identifiants sont dans `.gitignore`.
 - Le serveur n'écoute que sur `127.0.0.1`.
-- Les transcripts de Claude Code contiennent tes conversations. `transcripts.py` n'y lit que des nombres de tokens, le modèle, l'heure, l'identifiant du message et l'indicateur de sous-agent, et n'écrit que des compteurs (`tokens.csv`) ; jamais le texte.
+- Les transcripts de Claude Code contiennent tes conversations. `transcripts.py` n'y lit que des nombres de tokens, le modèle, l'heure, l'identifiant du message et l'indicateur de sous-agent, et n'écrit que des compteurs et des identifiants de messages (des chaînes aléatoires de l'API) ; jamais le texte, ni aucun nom de projet ou de dossier (les fichiers de transcripts sont identifiés par un hachage). Chaque message n'est compté qu'une fois, même quand une session reprise ou un fichier de sous-agent le répète.
 
 ## Remarques
 
