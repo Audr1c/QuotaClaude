@@ -4,8 +4,8 @@ Tests of the tracker and of the local server.   python test_claude_usage.py   (o
 
 - Offline tests: a simulated API response; checks the CSV / latest.js files and the ratio estimate.
 - Server tests: the widget server answers, serves files, and refuses other hosts / origins.
-- Live test (test_live_fetch): really queries the API if Claude Code credentials are present
-  on this machine, and prints your values. Skipped otherwise.
+- Live test (test_live_fetch): really queries the API and prints your values, only when CLAUDE_USAGE_LIVE=1
+  (the poller already asks it regularly; extra requests end in HTTP 429). Skipped otherwise.
 """
 import json
 import os
@@ -321,6 +321,10 @@ class ServerTests(unittest.TestCase):
 
 
 class LiveTest(unittest.TestCase):
+    """Opt-in: it asks the real API, which answers HTTP 429 when asked too often (the poller does it already).
+    Run it with CLAUDE_USAGE_LIVE=1 when you want to see your real values."""
+
+    @unittest.skipUnless(os.environ.get("CLAUDE_USAGE_LIVE") == "1", "set CLAUDE_USAGE_LIVE=1 to query the real API")
     def test_live_fetch(self):
         try:
             token = cu.read_token()

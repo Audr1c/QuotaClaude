@@ -144,7 +144,7 @@ window.CU = window.CU || {};
         <ul class="bars">
           ${rows.map(r => `
             <li>
-              <span class="name">${r.name}</span>
+              <span class="name">${esc(r.name)}</span>
               <span class="bar"><span class="fill" style="width:${(r.share / max * 100).toFixed(1)}%">${(r.days.length ? r.days : [{ pts: 1 }]).map(daySegment).join("")}</span></span>
               <b>${pct(r.share)}</b>
               <span class="q">${t("breakdown.quota", { n: num(r.quota) })}</span>

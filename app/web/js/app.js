@@ -85,9 +85,11 @@
       $("meta").textContent = "—";
       return;
     }
+    const restoreFocus = CU.captureFocus($("app"));          // the page is rebuilt below: keep the keyboard focus where it was
     $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.charts(m).replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : "")) + CU.formulas(m, formulasOpen);
     CU.fitBars($("app"));
     CU.chartsAfterRender($("app"));
+    restoreFocus();
 
     const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
     const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";
