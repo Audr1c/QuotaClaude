@@ -74,6 +74,7 @@
 
   /* ---------- rendering ---------- */
   function render() {
+    if (CU.dragging) return;                 // a chart range is being dragged: do not rebuild the page under the pointer
     const D = window.CLAUDE_USAGE, m = CU.compute(D, Date.now(), { hoursPerDay: hours });
     const err = $("err");
     if (!m) {
@@ -86,6 +87,7 @@
     }
     $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.charts(m).replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : "")) + CU.formulas(m, formulasOpen);
     CU.fitBars($("app"));
+    CU.chartsAfterRender($("app"));
 
     const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
     const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";

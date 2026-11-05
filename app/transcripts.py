@@ -140,37 +140,35 @@ def cache_hit(inp: float, cache_read: float, cache_write: float):
     return round(100.0 * cache_read / total, 1) if total > 0 else None
 
 
-def summary(st: dict, now: datetime, d7_by_day: dict | None = None, days: int = 14) -> dict:
-    """What the widget shows: per UTC day totals (with the weekly % of that day), last 24 h, week, per-model share."""
+def summary(st: dict, now: datetime, d7_by_day: dict | None = None, days: int = 120) -> dict:
+    """What the widget shows: per UTC day totals (overall and per model, with the weekly % of that day), the last 7 days,
+    and the per-model share. Counters per model are [input, output, cache_read, cache_write, messages]."""
     d7_by_day = d7_by_day or {}
     per_day: dict = {}
-    per_model: dict = {}
-    h24: dict = {}
-    cut24 = (now - timedelta(hours=24)).strftime("%Y-%m-%dT%H:00:00Z")
     cut7 = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:00:00Z")
     week = [0, 0, 0, 0, 0]
+    week_models: dict = {}
     for k, v in st["buckets"].items():
         hour, model = k.split("|", 1)
-        d = per_day.setdefault(hour[:10], [0, 0, 0, 0, 0])
+        day = per_day.setdefault(hour[:10], {})
+        m = day.setdefault(model, [0, 0, 0, 0, 0])
         for i, x in enumerate(v):
-            d[i] += x
-        if hour >= cut24:
-            h = h24.setdefault(hour, [0, 0, 0, 0, 0])
-            for i, x in enumerate(v):
-                h[i] += x
+            m[i] += x
         if hour >= cut7:
+            wm = week_models.setdefault(model, [0, 0, 0, 0, 0])
             for i, x in enumerate(v):
                 week[i] += x
-            per_model[model] = per_model.get(model, 0) + v[0] + v[1] + v[3]
+                wm[i] += x
     out_days = []
     for day in sorted(per_day)[-days:]:
-        i, o, cr, cw, n = per_day[day]
+        tot = [sum(m[i] for m in per_day[day].values()) for i in range(5)]
         d7 = d7_by_day.get(day)
-        fresh = i + o + cw                          # tokens that cost real work (cache reads are nearly free)
+        fresh = tot[0] + tot[1] + tot[3]            # tokens that cost real work (cache reads are nearly free)
         out_days.append({
-            "day": day, "input": i, "output": o, "cache_read": cr, "cache_write": cw, "messages": n,
-            "cache_hit": cache_hit(i, cr, cw), "d7": d7,
+            "day": day, "input": tot[0], "output": tot[1], "cache_read": tot[2], "cache_write": tot[3], "messages": tot[4],
+            "cache_hit": cache_hit(tot[0], tot[2], tot[3]), "d7": d7,
             "tokens_per_pct": round(fresh / d7) if d7 and d7 > 0 else None,
+            "models": {m: v for m, v in per_day[day].items() if any(v)},
         })
     wd7 = sum(d7_by_day.get(x["day"]) or 0 for x in out_days if x["day"] >= cut7[:10])
     wfresh = week[0] + week[1] + week[3]
@@ -179,6 +177,6 @@ def summary(st: dict, now: datetime, d7_by_day: dict | None = None, days: int = 
         "week": {"input": week[0], "output": week[1], "cache_read": week[2], "cache_write": week[3], "messages": week[4],
                  "cache_hit": cache_hit(week[0], week[2], week[3]),
                  "tokens_per_pct": round(wfresh / wd7) if wd7 > 0 else None},
-        "last24h": [{"t": h, "fresh": v[0] + v[1] + v[3], "cache_read": v[2]} for h, v in sorted(h24.items())],
-        "models": [{"name": m, "tokens": t} for m, t in sorted(per_model.items(), key=lambda x: -x[1]) if t > 0][:5],
+        "models": [{"name": m, "tokens": v[0] + v[1] + v[3]} for m, v in
+                   sorted(week_models.items(), key=lambda x: -(x[1][0] + x[1][1] + x[1][3])) if v[0] + v[1] + v[3] > 0][:5],
     }

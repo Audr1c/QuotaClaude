@@ -74,6 +74,17 @@ class OfflineTests(unittest.TestCase):
         self.assertEqual((day["d5"], day["d7"], day["ratio"]), (40.0, 4.0, 10.0))
         self.assertEqual(day["cum"], st["ratio_estimate"])
 
+    def test_hourly_5h_series(self):
+        # 5h: 0 -> 10 -> 30 in the first hour, then a new window (value drops: not counted) and +5 the next hour
+        cu.run(self.dir, payload(0.0, 20.0), T0)
+        cu.run(self.dir, payload(10.0, 21.0), T0 + timedelta(minutes=20))
+        cu.run(self.dir, payload(30.0, 22.0), T0 + timedelta(minutes=40))
+        cu.run(self.dir, payload(2.0, 22.0, r5="2026-10-22T17:00:00+00:00"), T0 + timedelta(minutes=70))
+        cu.run(self.dir, payload(7.0, 23.0, r5="2026-10-22T17:00:00+00:00"), T0 + timedelta(minutes=80))
+        st = self.read_js_state()
+        self.assertEqual(st["hourly_5h"], [["2026-10-22T09:00:00Z", 30.0], ["2026-10-22T10:00:00Z", 5.0]])
+        self.assertEqual(st["first_at"], "2026-10-22T09:00:00+00:00")
+
     def test_ratio_ignores_resets(self):
         cu.run(self.dir, payload(80.0, 20.0), T0)
         # new 5-hour window: the drop 80 -> 5 must not count
@@ -352,6 +363,7 @@ class TranscriptsTest(unittest.TestCase):
             s = T.summary(st, datetime(2026, 11, 5, 12, tzinfo=timezone.utc), {"2026-11-05": 2.0})
             self.assertEqual(s["week"]["cache_hit"], round(100 * 900 / (4 + 900 + 100), 1))
             self.assertEqual(s["days"][0]["tokens_per_pct"], round((4 + 57 + 100) / 2))
+            self.assertEqual(s["days"][0]["models"]["m1"], [4, 57, 900, 100, 2])
 
 
 if __name__ == "__main__":

@@ -183,8 +183,25 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .chart .note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; }
 .chart .stats { margin-top: 12px; }
+.chart .presets { margin-top: 12px; }
+.chart .rlabel { margin: 6px 0 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart .rlabel span { color: var(--muted); margin-left: 6px; }
+.chart .sub { margin: 16px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.chart div.plot { margin-top: 0; }
+.chart svg.mini { margin-top: 6px; cursor: grab; touch-action: none; user-select: none; }
+.chart svg.mini:active { cursor: grabbing; }
+.mini .mb { fill: var(--blue); opacity: .55; }
+.mini .ml { fill: none; stroke: var(--clay); stroke-width: 1.6; }
+.mini .dim { fill: var(--card); opacity: .65; }
+.mini .win { fill: none; stroke: var(--muted); stroke-width: 1; }
+.mini .hdl { fill: var(--muted); cursor: ew-resize; }
 .eqs.tokens td, .eqs.tokens th { padding: 5px 8px 5px 0; font-variant-numeric: tabular-nums; font-size: 12.5px; width: auto; }
+.eqs.tokens th { white-space: nowrap; font-weight: 500; }
 .eqs.tokens tr:first-child td { color: var(--muted); font-size: 11px; border-top: 0; }
 .eqs.tokens td:nth-child(n+3) { text-align: right; }
-.tbar { display: block; height: 8px; min-width: 60px; border-radius: 4px; background: var(--track); overflow: hidden; }
-.tbar span { display: block; height: 100%; background: var(--blue); }
+.eqs.tokens td.hits span + span { margin-left: 8px; }
+.eqs.tokens .dot { margin-right: 6px; }
+.tbar { display: flex; height: 9px; min-width: 60px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.tbar span { display: block; height: 100%; }
+.share { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--track); margin-bottom: 6px; }
+.share span { display: block; min-width: 2px; }

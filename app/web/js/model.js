@@ -61,25 +61,6 @@ window.CU = window.CU || {};
     return { pace: total > 0 ? clamp(elapsed / total * 100) : null, elapsedH: elapsed / H, totalH: total / H, startToday };
   }
 
-  /* 5-hour usage consumed in each of the last `n` clock hours (in 5h-%): sum of the increases between consecutive
-     readings, credited to the hour of the later reading. A drop of the 5h value = the window reset: no increase counted. */
-  CU.hourly = function (history, now, n) {
-    const top = new Date(now); top.setMinutes(0, 0, 0);
-    const first = top.getTime() - (n - 1) * H, out = [];
-    for (let i = 0; i < n; i++) out.push({ t: first + i * H, v: 0 });
-    let prev = null;
-    for (const r of history || []) {
-      const t = Date.parse(r.t);
-      if (isNaN(t) || r.h5 == null) continue;
-      if (prev != null && r.h5 > prev) {
-        const i = Math.floor((t - first) / H);
-        if (i >= 0 && i < n) out[i].v += r.h5 - prev;
-      }
-      prev = r.h5;
-    }
-    return out;
-  };
-
   CU.compute = function (D, now = Date.now(), opts = {}) {
     if (!D || !D.seven_day) return null;
     const ratio = D.ratio_estimate || D.ratio_default;   // % of the week one full 5-hour window costs
@@ -131,6 +112,8 @@ window.CU = window.CU || {};
       history: D.history || [],
       ratioDaily: D.ratio_daily || [],
       tokens: D.tokens || null,
+      hourly5: D.hourly_5h || [],          // [[hour_iso, 5h-%]] over the whole history
+      firstAt: D.first_at || null,
       // per-product breakdown: share of what was used, and the equivalent in points of the weekly quota
       breakdown: D.breakdown && D.breakdown.rows
         ? D.breakdown.rows.map(r => ({ name: r.name, share: r.pct || 0, quota: (r.pct || 0) * seven.used / 100, days: r.days || [] }))

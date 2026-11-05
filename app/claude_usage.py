@@ -283,6 +283,21 @@ def tokens_state(data_dir: Path, rows: list[dict], now: datetime):
         return None
 
 
+def hourly_5h(rows: list[dict]) -> list:
+    """5-hour usage consumed per clock hour (UTC), whole history: [[hour_iso, 5h-%]], hours without usage left out.
+    Sum of the increases between consecutive readings of the same 5-hour window, credited to the later reading's hour."""
+    out: dict = {}
+    for a, b in zip(rows, rows[1:]):
+        a5, b5 = num(a.get("five_hour_pct")), num(b.get("five_hour_pct"))
+        if None in (a5, b5) or b5 <= a5:
+            continue
+        if not _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+            continue
+        h = parse_dt(b["timestamp"]).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+        out[h] = out.get(h, 0.0) + (b5 - a5)
+    return [[h, round(v, 1)] for h, v in sorted(out.items())]
+
+
 MIN_5H_POINTS_PER_DAY = 5.0      # a day with less 5h usage is too noisy to give its own ratio (weekly % are integers)
 
 
@@ -534,6 +549,8 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
         "ratio_points": round(ratio_points, 1),
         "ratio_default": DEFAULT_RATIO,
         "ratio_daily": ratio_daily(rows),
+        "hourly_5h": hourly_5h(rows),
+        "first_at": rows[0]["timestamp"] if rows else None,
         "tokens": tokens_state(data_dir, rows, now),
         "samples": len(rows),
         "history": history,
