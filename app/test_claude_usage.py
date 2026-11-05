@@ -324,5 +324,35 @@ class LiveTest(unittest.TestCase):
         self.assertTrue(row["seven_day_pct"] != "" or row["five_hour_pct"] != "")
 
 
+class TranscriptsTest(unittest.TestCase):
+    """Token counters read from fake transcripts (never the real ~/.claude)."""
+
+    def line(self, mid, hour, out, cr=0, cw=0, text="SECRET"):
+        return json.dumps({"type": "assistant", "timestamp": f"2026-11-05T{hour}:10:00.000Z",
+                           "message": {"id": mid, "model": "m1", "content": text,
+                                       "usage": {"input_tokens": 2, "output_tokens": out,
+                                                 "cache_read_input_tokens": cr, "cache_creation_input_tokens": cw}}}) + "\n"
+
+    def test_dedup_incremental_and_no_content(self):
+        import transcripts as T
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            root, data = Path(a), Path(b)
+            f = root / "p" / "s.jsonl"
+            f.parent.mkdir()
+            f.write_text(self.line("a", "10", 5) + self.line("a", "10", 50, cr=900, cw=100), encoding="utf-8")   # streamed twice
+            st = T.scan(data, root)
+            self.assertEqual(st["buckets"]["2026-11-05T10:00:00Z|m1"], [2, 50, 900, 100, 1])
+            with f.open("a", encoding="utf-8") as fh:
+                fh.write(self.line("b", "11", 7))
+                fh.write('{"type": "assistant", "half-written')                       # incomplete last line: left for later
+            st = T.scan(data, root)
+            self.assertEqual(sum(v[4] for v in st["buckets"].values()), 2)
+            self.assertEqual(T.scan(data, root)["buckets"], st["buckets"])           # nothing new: nothing counted twice
+            self.assertNotIn("SECRET", (data / "tokens.csv").read_text() + (data / "transcripts_state.json").read_text())
+            s = T.summary(st, datetime(2026, 11, 5, 12, tzinfo=timezone.utc), {"2026-11-05": 2.0})
+            self.assertEqual(s["week"]["cache_hit"], round(100 * 900 / (4 + 900 + 100), 1))
+            self.assertEqual(s["days"][0]["tokens_per_pct"], round((4 + 57 + 100) / 2))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

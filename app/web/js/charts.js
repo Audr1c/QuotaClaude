@@ -71,5 +71,38 @@ window.CU = window.CU || {};
       </details>`;
   }
 
-  CU.charts = m => hourlyChart(m) + ratioChart(m);
+  /* ---------- 3. tokens and cache (from the local Claude Code transcripts) ---------- */
+  const k = v => v == null ? "—" : v >= 1e6 ? CU.fmt.num(v / 1e6, 1) + " M" : v >= 1e3 ? CU.fmt.num(v / 1e3, v >= 1e5 ? 0 : 1) + " k" : String(v);
+  function tokensCard(m) {
+    const tk = m.tokens;
+    if (!tk || !tk.days.length) return "";
+    const w = tk.week, days = tk.days.slice(-7).reverse();
+    const maxFresh = Math.max(...days.map(d => d.input + d.output + d.cache_write), 1);
+    const rows = days.map(d => {
+      const fresh = d.input + d.output + d.cache_write;
+      return `<tr><th>${d.day.slice(8)}/${d.day.slice(5, 7)}</th>
+        <td><span class="tbar"><span style="width:${(fresh / maxFresh * 100).toFixed(1)}%"></span></span></td>
+        <td>${k(fresh)}</td><td>${d.cache_hit == null ? "—" : CU.fmt.pct(d.cache_hit, 0)}</td>
+        <td>${d.d7 ? CU.fmt.pct(d.d7, 0) : "—"}</td><td>${k(d.tokens_per_pct)}</td></tr>`;
+    }).join("");
+    const models = tk.models.map(x => `${x.name.replace(/^claude-/, "")} ${k(x.tokens)}`).join(" · ");
+    const hit = w.cache_hit == null ? "—" : CU.fmt.pct(w.cache_hit, 1);
+    return `
+      <details class="card chart" data-key="tokens">
+        <summary><h2>${t("chart.tokens.title")}</h2><span class="hint">${t("chart.tokens.hit", { n: hit })}</span></summary>
+        <div class="stats">
+          <div><b>${hit}</b><span>${t("chart.tokens.s.hit")}</span></div>
+          <div><b>${k(w.input + w.output + w.cache_write)}</b><span>${t("chart.tokens.s.fresh")}</span></div>
+          <div><b>${k(w.tokens_per_pct)}</b><span>${t("chart.tokens.s.perpct")}</span></div>
+        </div>
+        <table class="eqs tokens">
+          <tr><th></th><td></td><td>${t("chart.tokens.c.fresh")}</td><td>${t("chart.tokens.c.hit")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.perpct")}</td></tr>
+          ${rows}
+        </table>
+        ${models ? `<p class="note">${t("chart.tokens.models")} ${models}</p>` : ""}
+        <p class="note">${t("chart.tokens.note")}</p>
+      </details>`;
+  }
+
+  CU.charts = m => hourlyChart(m) + ratioChart(m) + tokensCard(m);
 })(window.CU);

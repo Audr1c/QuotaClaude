@@ -130,6 +130,7 @@ window.CU = window.CU || {};
       diagnostics: D.diagnostics || null,
       history: D.history || [],
       ratioDaily: D.ratio_daily || [],
+      tokens: D.tokens || null,
       // per-product breakdown: share of what was used, and the equivalent in points of the weekly quota
       breakdown: D.breakdown && D.breakdown.rows
         ? D.breakdown.rows.map(r => ({ name: r.name, share: r.pct || 0, quota: (r.pct || 0) * seven.used / 100, days: r.days || [] }))

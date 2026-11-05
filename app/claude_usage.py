@@ -258,6 +258,31 @@ def _same_window_deltas(rows: list[dict]):
             yield b["timestamp"], d5, d7
 
 
+def weekly_by_day(rows: list[dict]) -> dict:
+    """Weekly % consumed per UTC day: increases between consecutive readings of the same 7-day window."""
+    out: dict = {}
+    for a, b in zip(rows, rows[1:]):
+        a7, b7 = num(a.get("seven_day_pct")), num(b.get("seven_day_pct"))
+        if None in (a7, b7) or not _same(parse_dt(a.get("seven_day_resets_at")), parse_dt(b.get("seven_day_resets_at"))):
+            continue
+        if b7 > a7:
+            out[b["timestamp"][:10]] = out.get(b["timestamp"][:10], 0.0) + (b7 - a7)
+    return out
+
+
+def tokens_state(data_dir: Path, rows: list[dict], now: datetime):
+    """Token counters from the local transcripts (see transcripts.py), only for the real data folder.
+    Never lets a problem there break a quota reading."""
+    if data_dir.resolve() != DATA_DIR.resolve():
+        return None
+    try:
+        import transcripts
+        return transcripts.summary(transcripts.scan(data_dir), now, weekly_by_day(rows))
+    except Exception as e:                      # unreadable folder, odd file: log the type only, never a line of a transcript
+        log(data_dir, f"transcripts: {type(e).__name__}")
+        return None
+
+
 MIN_5H_POINTS_PER_DAY = 5.0      # a day with less 5h usage is too noisy to give its own ratio (weekly % are integers)
 
 
@@ -509,6 +534,7 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
         "ratio_points": round(ratio_points, 1),
         "ratio_default": DEFAULT_RATIO,
         "ratio_daily": ratio_daily(rows),
+        "tokens": tokens_state(data_dir, rows, now),
         "samples": len(rows),
         "history": history,
         "breakdown": breakdown,

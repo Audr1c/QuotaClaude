@@ -182,3 +182,9 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .chart svg .ax { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .chart .note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; }
+.chart .stats { margin-top: 12px; }
+.eqs.tokens td, .eqs.tokens th { padding: 5px 8px 5px 0; font-variant-numeric: tabular-nums; font-size: 12.5px; width: auto; }
+.eqs.tokens tr:first-child td { color: var(--muted); font-size: 11px; border-top: 0; }
+.eqs.tokens td:nth-child(n+3) { text-align: right; }
+.tbar { display: block; height: 8px; min-width: 60px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.tbar span { display: block; height: 100%; background: var(--blue); }
