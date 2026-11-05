@@ -1,0 +1,5 @@
+https://github.com/leonelRos/Claude-token-tool
+https://github.com/mickpletcher/claude-code-token-tracker
+https://github.com/BrodyKretz/claude-token-counter
+https://github.com/akakarantzas/claude-code-counter
+https://github.com/codeinaire/claude-code-usage-tracker

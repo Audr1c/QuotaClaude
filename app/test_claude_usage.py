@@ -64,6 +64,16 @@ class OfflineTests(unittest.TestCase):
             cu.run(self.dir, payload(10.0 * i, 20.0 + i), T0 + timedelta(minutes=10 * i))
         self.assertAlmostEqual(self.read_js_state()["ratio_estimate"], 10.0)
 
+    def test_ratio_daily_series(self):
+        # day 1: 5h 0 -> 40, 7d 20 -> 24 (ratio 10); the series ends with the same all-time estimate as ratio_estimate
+        for i in range(5):
+            cu.run(self.dir, payload(10.0 * i, 20.0 + i), T0 + timedelta(minutes=10 * i))
+        st = self.read_js_state()
+        self.assertEqual(len(st["ratio_daily"]), 1)
+        day = st["ratio_daily"][0]
+        self.assertEqual((day["d5"], day["d7"], day["ratio"]), (40.0, 4.0, 10.0))
+        self.assertEqual(day["cum"], st["ratio_estimate"])
+
     def test_ratio_ignores_resets(self):
         cu.run(self.dir, payload(80.0, 20.0), T0)
         # new 5-hour window: the drop 80 -> 5 must not count

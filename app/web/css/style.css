@@ -169,3 +169,16 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .eqs tr.flag th, .eqs tr.flag code { color: var(--clay-ink); }
 .badge { font-size: 10px; border: 1px solid currentColor; border-radius: 999px; padding: 1px 6px; white-space: nowrap; font-weight: 400; }
 @media (max-width: 560px) { .eqs th { width: 42%; } }
+
+/* ---------- history charts ---------- */
+.chart { margin-top: 16px; padding-top: 14px; padding-bottom: 14px; }
+.chart summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.chart summary::-webkit-details-marker { display: none; }
+.chart summary::before { content: "›"; color: var(--muted); transition: transform .15s; }
+.chart[open] summary::before { transform: rotate(90deg); }
+.chart h2 { font-size: 16px; }
+.chart .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+.chart svg { display: block; width: 100%; height: auto; margin-top: 12px; }
+.chart svg .ax { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.chart .note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; }
