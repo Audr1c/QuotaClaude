@@ -45,6 +45,16 @@ Gauges for the 5-hour window and the week, a compact/detailed switch, a collapse
 
 In the breakdown, each product's bar has one segment per local day, all in the same colour with thin separators, and the day name written inside (full name, then shorter abbreviations, then one letter, then nothing, depending on the room). Hover a segment for its date and points. Each product is measured on its own: a day's segment is how much **that** product rose that day (from the per-product shares recorded in `breakdown.csv` at each change), so a Code-only day only shows up in the Code bar. Usage from before the per-product tracking started this week forms a single "Earlier" segment (exact in total, not split by day).
 
+Three collapsed history panels sit below the breakdown:
+
+- **Usage per hour**: bars of the 5-hour window you consumed each hour (1 h, 3 h, 6 h or 1 day per bar depending on the range), against the dashed hourly pace that keeps you on your daily budget.
+- **5 h → week ratio over time**: how many % of the week one full 5-hour window costs, day by day (dots) and as the all-time estimate the widget uses (line).
+- **Tokens and cache**: the four token types (fresh input, cache write, cache read, output) with their number, their share of the tokens, their relative price and their share of the cost, plus the saving brought by the cache and a per-day view. Cost is in plain-input-token equivalents (cache read × 0.1, cache write × 1.25 or × 2, output × 5), not dollars; how the quota weights each type is not published.
+
+The first two have a range selector and a small overview below, like a market chart: drag the window to move it, drag its edges to zoom, click outside to jump. The range is remembered in the browser. The tokens panel has its own 7 d / 14 d / 30 d / All buttons.
+
+The token figures come from Claude Code's own transcripts (`~/.claude/projects/**/*.jsonl`, or `CLAUDE_PROJECTS_DIR`), read incrementally by `transcripts.py`: only the usage numbers, model, time and message id are read from each line, never the conversation text. Chats and Cowork use your quota too but leave no transcript, so token counts cover Claude Code only.
+
 ### Command-line shortcuts
 
 ```
@@ -96,6 +106,8 @@ Everything stays in the `app/data/` folder next to the code (git-ignored, create
 | `usage.csv` | one line per reading: time, 5-hour %, week %, reset times |
 | `latest.json` / `latest.js` | latest state + recent history (only readings where values changed, plus the last one), read by the widget |
 | `breakdown.csv` | per-product weekly shares, one line per product each time they change; used to split the breakdown bars by day |
+| `tokens.csv` | token counters per hour, model and agent kind (main / sub-agent), read from Claude Code's transcripts (numbers only) |
+| `transcripts_state.json` | where the transcript reader stopped in each file, and its hourly counters |
 | `poller.json` | poller state: time of the next reading, current step |
 | `poller.lock` | lock so that only one poller runs at a time |
 | `last_response.json` | raw API answer of the last reading (debugging) |
@@ -152,6 +164,7 @@ app/                        everything else
   launcher/                 menu code and translations (strings.py)
   claude_usage.py           reads the quota, writes data/
   poller.py                 adaptive poller (background readings)
+  transcripts.py            local token counters from Claude Code's transcripts
   server.py                 local widget server
   web/                      the widget (HTML, CSS, JS; EN/FR)
   windows/  linux/          scheduler install/uninstall scripts
@@ -165,6 +178,7 @@ app/                        everything else
 - No data leaves your machine except the request to Anthropic's API with your own token.
 - The token is read at run time and never copied or logged. `app/data/` and credentials are in `.gitignore`.
 - The server only listens on `127.0.0.1`.
+- Claude Code's transcripts contain your conversations. `transcripts.py` reads only token numbers, the model, the time, the message id and the sub-agent flag from them, and writes only counters (`tokens.csv`); never the text.
 
 ## Notes
 

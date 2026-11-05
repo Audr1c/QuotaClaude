@@ -51,7 +51,7 @@ TYPES = {
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ClaudeUsage/0.3"
+    server_version = "ClaudeUsage/1.1"
 
     def log_message(self, fmt, *args):  # silent (pythonw has no console)
         pass
