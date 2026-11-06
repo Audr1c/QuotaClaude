@@ -25,7 +25,7 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.five")}</h2>${pill(CU.status(five.used, five.pace))}</div>
         ${CU.gauge({
           label: t("card.five"),
-          rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.limit,
+          rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.limit, time: CU.gaugeTime("five", five.reset && five.reset.getTime()),
                     markers: [{ v: five.pace, color: BLUE_INK }, { v: five.weekPace, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(five.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
@@ -45,7 +45,7 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.seven")}</h2>${pill(CU.status(seven.used, seven.pace))}</div>
         ${CU.gauge({
           label: t("card.seven"),
-          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, limit: seven.limit, markers: [{ v: seven.pace, color: CLAY_INK }] }],
+          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, limit: seven.limit, time: CU.gaugeTime("seven", seven.reset && seven.reset.getTime()), markers: [{ v: seven.pace, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(seven.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
           footer: resetText(seven),
@@ -60,7 +60,7 @@ window.CU = window.CU || {};
         </ul>
       </section>`;
 
-    return `<div class="grid">${card5}${card7}</div><p class="note gauges-note" data-note="gauges">${t("gauges.note")}</p>`;
+    return `<div class="grid">${card5}${card7}</div><p class="note gauges-note" data-note="gauges">${t("gauges.note")}${m.workHours ? " " + t("gauges.work") : ""}</p>`;
   }
 
   /* ---------------- compact view: one block, two concentric rings ---------------- */
@@ -69,8 +69,9 @@ window.CU = window.CU || {};
     const svg = CU.gauge({
       label: t("gauge.aria.compact"),
       rings: [
-        { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.limit, markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
+        { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.limit, time: CU.gaugeTime("seven", seven.reset && seven.reset.getTime()), markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
         { r: 92, width: 16, used: five.used, color: BLUE, limit: five.limit,
+          time: Object.assign({ side: "in" }, CU.gaugeTime("five", five.reset && five.reset.getTime(), false)),
           markers: [{ v: five.pace, color: BLUE_INK, side: "in" }, { v: five.weekPace, color: CLAY_INK, side: "out" }] },
       ],
       center: [
@@ -95,7 +96,7 @@ window.CU = window.CU || {};
           ${li("tri", CLAY_INK, t("compact.legend.limit5"), pct(five.weekPace))}
           ${li("tri", CLAY_INK, t("compact.legend.pace7"), pct(seven.pace))}
         </ul>
-        <p class="note gauges-note" data-note="gauges">${t("gauges.note")}</p>
+        <p class="note gauges-note" data-note="gauges">${t("gauges.note")}${m.workHours ? " " + t("gauges.work") : ""}</p>
         <div class="stats">
           <div><b>${pct(five.paceRate, 1)}</b><span>${t("stat.rate")}</span></div>
           <div><b>${pct(seven.ratePerDay, 1)}</b><span>${t("stat.day")}</span></div>
