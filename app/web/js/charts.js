@@ -15,8 +15,12 @@ window.CU = window.CU || {};
   const W = 640, HT = 210, L = 38, R = 12, T = 12, B = 26, MH = 46;      // viewBox, margins, overview height
   const f = n => n.toFixed(1);
   const loc = () => CU.lang === "fr" ? "fr-FR" : "en-GB";
-  const dm = ms => new Date(ms).toLocaleDateString(loc(), { day: "2-digit", month: "2-digit" });
-  const dmh = ms => new Date(ms).toLocaleString(loc(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+  /* withYear adds the 2-digit year (range labels only; axis ticks stay short) */
+  const dm = (ms, withYear) => new Date(ms).toLocaleDateString(loc(), { day: "2-digit", month: "2-digit", ...(withYear ? { year: "2-digit" } : {}) });
+  const dmh = (ms, withYear) => new Date(ms).toLocaleString(loc(), { day: "2-digit", month: "2-digit", ...(withYear ? { year: "2-digit" } : {}), hour: "2-digit", minute: "2-digit", hour12: false });
+  /* a range label needs the year when its two ends are in different years, or when either end is not in the current year */
+  const rangeYear = (a, b) => { const y = ms => new Date(ms).getFullYear(), now = new Date().getFullYear();
+    return y(a) !== y(b) || y(a) !== now || y(b) !== now; };
   const niceStep = max => { const raw = max / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
     return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
   const k = v => v == null ? "—" : v >= 1e6 ? CU.fmt.num(v / 1e6, 1) + " M" : v >= 1e3 ? CU.fmt.num(v / 1e3, v >= 1e5 ? 0 : 1) + " k" : String(v);
@@ -175,7 +179,7 @@ window.CU = window.CU || {};
     hourly: {
       key: "hourly", span: DAY, minSpan: 6 * H, presets: [P("24h", DAY), P("3d", 3 * DAY), P("7d", 7 * DAY), P("14d", 14 * DAY), P("all", 0)],
       ready: m => m.hourly5 && m.hourly5.length, domain: hourlyDomain, mini: hourlyMini, plot: hourlyPlot,
-      label: (r, a, b) => `${dmh(a)} → ${dmh(b)} · ${r.bh < 24 ? t("chart.bucket.h", { n: r.bh }) : r.bh >= 168 ? t("chart.bucket.w") : t("chart.bucket.d")} · ${t("chart.hourly.total", { n: CU.fmt.pct(r.total) })}`,
+      label: (r, a, b) => { const yr = rangeYear(a, b); return `${dmh(a, yr)} → ${dmh(b, yr)} · ${r.bh < 24 ? t("chart.bucket.h", { n: r.bh }) : r.bh >= 168 ? t("chart.bucket.w") : t("chart.bucket.d")} · ${t("chart.hourly.total", { n: CU.fmt.pct(r.total) })}`; },
       hint: (m, r) => t("chart.hourly.total", { n: CU.fmt.pct(r.total) }),
       note: m => t("chart.hourly.note", { rate: CU.fmt.pct(m.five.paceRate, 1) }),
       legend: () => "", title: "chart.hourly.title",
@@ -183,7 +187,7 @@ window.CU = window.CU || {};
     ratio: {
       key: "ratio", span: 0, minSpan: 3 * DAY, presets: [P("7d", 7 * DAY), P("14d", 14 * DAY), P("all", 0)],
       ready: m => m.ratioDaily.length >= 2, domain: ratioDomain, mini: ratioMini, plot: ratioPlot,
-      label: (r, a, b) => `${dm(a)} → ${dm(b)}`,
+      label: (r, a, b) => { const yr = rangeYear(a, b); return `${dm(a, yr)} → ${dm(b, yr)}`; },
       hint: m => t("chart.ratio.now", { n: CU.fmt.pct(m.ratio, 1) }), note: () => t("chart.ratio.note"),
       legend: () => `<ul class="legend chart-legend"><li><span class="dot" style="color:var(--blue)"></span><span class="lbl">${t("chart.ratio.day")}</span></li>`
         + `<li><span class="dot" style="color:var(--clay)"></span><span class="lbl">${t("chart.ratio.cum")}</span></li></ul>`,
