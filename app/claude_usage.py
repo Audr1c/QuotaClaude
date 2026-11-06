@@ -48,6 +48,7 @@ CSV_FIELDS = [
 # Replaced automatically by an estimate once the history allows it.
 DEFAULT_RATIO = 10.0
 MIN_5H_POINTS_FOR_RATIO = 20.0   # cumulated 5h % observed before trusting the estimate
+SCHEMA = 1                       # version of latest.json / the /api/v1 answers: changes on any incompatible change
 HISTORY_DAYS = 8                 # history embedded in latest.js for charts
 SAME_WINDOW_TOLERANCE_S = 300    # two resets_at less than 5 minutes apart = same window
 MAX_LOG_BYTES = 200_000
@@ -548,6 +549,7 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
             continue
         history.append(h)
     state = {
+        "schema": SCHEMA,
         "generated_at": iso(now),
         "fetched_at": last["timestamp"] if last else None,
         "five_hour": {"pct": num(last.get("five_hour_pct")), "resets_at": last.get("five_hour_resets_at") or None} if last else None,

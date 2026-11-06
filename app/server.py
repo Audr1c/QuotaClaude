@@ -15,6 +15,13 @@ Routes:
     GET  /data/poller.json   -> state of the adaptive poller (when the next reading is due)
     GET  /api/ping           -> identifies this server (and its process id, so the launcher can stop it)
     POST /api/refresh        -> takes a reading now and returns the new state
+  Read API, version 1 (the same data for every client: widget, VS Code, phone; never the Claude token):
+    GET  /api/v1/latest              -> data/latest.json (field "schema": 1)
+    GET  /api/v1/history?since=ISO   -> every reading since then: [{t, h5, d7, r5, r7}]
+    GET  /api/v1/tokens?since=DAY    -> token counters per day since YYYY-MM-DD
+    GET  /api/v1/model[?hours=N]     -> the gauge values, limits and paces computed here (model.py), ready to draw
+    GET  /api/v1/config              -> shared widget settings (settings.py)
+    POST /api/v1/config              -> change some of them: JSON object, validated; same Origin rule as /api/refresh
 
 Listens on 127.0.0.1 only: nothing is exposed to the network. Other protections: Host check (DNS rebinding),
 Sec-Fetch-Site check (a page of another site cannot read /data/ with <script src> or fetch), Origin required on POST,
@@ -34,6 +41,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import claude_usage as cu
+import model
+import settings
 
 ROOT = Path(__file__).resolve().parent
 WEB = (ROOT / "web").resolve()
@@ -42,6 +51,9 @@ DEFAULT_PORT = 8765
 _refresh_lock = threading.Lock()
 MIN_REFRESH_GAP_S = 20                      # POST /api/refresh inside this gap answers with the saved state, no API call
 _last_refresh = [0.0]
+CONFIG_POSTS = (20, 10.0)                   # at most 20 settings changes per 10 s (a slider sends a few per second)
+_config_posts: list = []
+MAX_BODY = 4096
 
 # Sent with every answer. The page has no inline script or handler, so scripts can be limited to our own files.
 SECURITY_HEADERS = {
@@ -127,6 +139,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"app": APP_ID, "pid": os.getpid()})
         if not self._fetch_ok():
             return self._json(403, {"error": "cross-site request refused"})
+        if path.startswith("/api/v1/"):
+            return self._api_get(path[len("/api/v1/"):], self._query())
         if path in ("/", "/index.html", "/web", "/web/"):
             query = self.path.split("?", 1)[1] if "?" in self.path else ""
             target = "/web/index.html" + ("?" + query if query else "")
@@ -143,14 +157,77 @@ class Handler(BaseHTTPRequestHandler):
             return self._not_found()
         self._send(200, f.read_bytes(), TYPES.get(f.suffix.lower(), "application/octet-stream"))
 
+    def _query(self) -> dict:
+        from urllib.parse import parse_qs
+        q = parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}
+        return {k: v[0] for k, v in q.items()}
+
+    def _api_get(self, name: str, q: dict):
+        state = self._saved_state()
+        if name == "latest":
+            return self._json(200, state) if state else self._json(404, {"error": "no reading yet"})
+        if name == "history":
+            # an unencoded "+" of the time zone arrives as a space
+            since = cu.parse_dt(q["since"].replace(" ", "+")) if q.get("since") else None
+            if q.get("since") and since is None:
+                return self._json(400, {"error": "since: an ISO date-time"})
+            rows = cu.load_history(cu.DATA_DIR / "usage.csv")
+            out = [{"t": r["timestamp"], "h5": cu.num(r.get("five_hour_pct")), "d7": cu.num(r.get("seven_day_pct")),
+                    "r5": r.get("five_hour_resets_at") or None, "r7": r.get("seven_day_resets_at") or None}
+                   for r in rows if since is None or cu.parse_dt(r["timestamp"]) >= since]
+            return self._json(200, {"schema": 1, "readings": out})
+        if name == "tokens":
+            since = q.get("since", "")
+            if since and not (len(since) == 10 and since[4] == "-" and since[7] == "-" and since.replace("-", "").isdigit()):
+                return self._json(400, {"error": "since: YYYY-MM-DD"})
+            tok = (state or {}).get("tokens") or {"days": [], "week": None}
+            return self._json(200, {"schema": 1, "days": [d for d in tok.get("days", []) if d.get("day", "") >= since],
+                                    "week": tok.get("week")})
+        if name == "model":
+            prefs = settings.load()
+            hours = (prefs["hours"] if prefs["work_hours"] else 24)
+            if "hours" in q:
+                if not q["hours"].isdigit() or not 1 <= int(q["hours"]) <= 24:
+                    return self._json(400, {"error": "hours: 1..24"})
+                hours = int(q["hours"])
+            m = model.compute(state, time.time() * 1000, hours) if state else None
+            return self._json(200, m) if m else self._json(404, {"error": "no reading yet"})
+        if name == "config":
+            return self._json(200, {"schema": 1, "widget": settings.load()})
+        return self._not_found()
+
+    def _origin_ok(self) -> bool:
+        # Only the widget itself: a browser always sends Origin on a POST, so a missing one is not the widget.
+        return self.headers.get("Origin") == f"http://{self.headers.get('Host', '')}" and self._fetch_ok()
+
+    def _post_config(self):
+        now = time.monotonic()
+        _config_posts[:] = [t for t in _config_posts if now - t < CONFIG_POSTS[1]]
+        if len(_config_posts) >= CONFIG_POSTS[0]:
+            return self._json(429, {"error": "too many changes, wait a few seconds"})
+        _config_posts.append(now)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = -1
+        if n <= 0 or n > MAX_BODY:
+            return self._json(400, {"error": f"a JSON body of at most {MAX_BODY} bytes is expected"})
+        try:
+            changes = json.loads(self.rfile.read(n).decode("utf-8"))
+            return self._json(200, {"schema": 1, "widget": settings.update(changes)})
+        except (ValueError, UnicodeDecodeError) as e:
+            return self._json(400, {"error": str(e)[:200]})
+
     def do_POST(self):
         if not self._host_ok():
             return self._json(403, {"error": "host refused"})
-        if self.path.split("?", 1)[0] != "/api/refresh":
+        path = self.path.split("?", 1)[0]
+        if path not in ("/api/refresh", "/api/v1/config"):
             return self._not_found()
-        # Only the widget itself: a browser always sends Origin on a POST, so a missing one is not the widget.
-        if self.headers.get("Origin") != f"http://{self.headers.get('Host', '')}" or not self._fetch_ok():
+        if not self._origin_ok():
             return self._json(403, {"error": "origin refused"})
+        if path == "/api/v1/config":
+            return self._post_config()
         with _refresh_lock:
             if time.monotonic() - _last_refresh[0] < MIN_REFRESH_GAP_S:     # clicks in a row must not turn into 429s
                 return self._json(200, {"ok": True, "cached": True, "error": None, "state": self._saved_state()})

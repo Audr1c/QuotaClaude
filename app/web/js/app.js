@@ -130,6 +130,7 @@
   slider.addEventListener("input", () => {
     hours = parseInt(slider.value, 10) || 8;
     try { localStorage.setItem(HOURS_KEY, String(hours)); } catch (e) { /* ignore */ }
+    share({ hours });
     showHours();
     render();
   });
@@ -151,6 +152,7 @@
     if (baseLevel() < 9) { levelPref = 9; notesOn = true; } else notesOn = !notesOn;
     for (const k in noteFlip) delete noteFlip[k];
     try { localStorage.setItem(NOTES_KEY, notesOn ? "1" : "0"); localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
+    share({ notes: notesOn, level: levelPref });
     showLevel(); render();
   });
   $("app").addEventListener("click", e => {
@@ -200,6 +202,7 @@
   workBox.addEventListener("change", () => {
     workOn = workBox.checked;
     try { localStorage.setItem(WORK_KEY, workOn ? "1" : "0"); } catch (e) { /* ignore */ }
+    share({ work_hours: workOn });
     showWork();
     render();
   });
@@ -226,11 +229,13 @@
   levelInput.addEventListener("input", () => {
     levelPref = parseInt(levelInput.value, 10) || 9;
     try { localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
+    share({ level: levelPref });
     showLevel(); render();
   });
   $("level-auto").addEventListener("click", () => {
     levelPref = "auto";
     try { localStorage.removeItem(LEVEL_KEY); } catch (e) { /* ignore */ }
+    share({ level: "auto" });
     measure(); showLevel(); render();
   });
   function measure() {                               // a small dead band around each threshold: no flicker on a scrollbar
@@ -254,7 +259,7 @@
     if (!SERVED) refreshBtn.title = CU.t("refresh.disabled");
     render();
   }
-  document.querySelectorAll("[data-lang]").forEach(b => b.addEventListener("click", () => { CU.setLang(b.dataset.lang); applyLanguage(); }));
+  document.querySelectorAll("[data-lang]").forEach(b => b.addEventListener("click", () => { CU.setLang(b.dataset.lang); share({ lang: CU.lang }); applyLanguage(); }));
 
   /* ---------- Refresh button ---------- */
   if (!SERVED) refreshBtn.disabled = true;
@@ -282,8 +287,35 @@
   /* ---------- installable app (ACC-1): a service worker, only when served (127.0.0.1 counts as a secure origin) ---------- */
   if (SERVED && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { /* not essential */ });
 
+  /* ---------- shared settings (API-2): data/config.json through /api/v1/config, so every client and browser sees
+     the same ones. localStorage stays the fallback (page opened as a file, server unreachable). ---------- */
+  let pending = {}, shareTimer = null;
+  function share(changes) {
+    if (!SERVED) return;
+    Object.assign(pending, changes);
+    clearTimeout(shareTimer);
+    shareTimer = setTimeout(() => {                  // a slider sends many values: only the last one, once it rests
+      const body = JSON.stringify(pending); pending = {};
+      fetch("/api/v1/config", { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => { /* kept locally */ });
+    }, 500);
+  }
+  function loadShared() {
+    if (!SERVED) return Promise.resolve();
+    return fetch("/api/v1/config", { cache: "no-store" }).then(r => (r.ok ? r.json() : null)).then(c => {
+      const w = c && c.widget;
+      if (!w) return;
+      levelPref = w.level === "auto" || (w.level >= 1 && w.level <= 9) ? w.level : levelPref;
+      notesOn = w.notes !== false; workOn = !!w.work_hours;
+      if (w.hours >= 1 && w.hours <= 24) hours = w.hours;
+      const urlLang = new URLSearchParams(location.search).get("lang");
+      if (w.lang && !urlLang && w.lang !== CU.lang) CU.setLang(w.lang);   // ?lang= in the address wins
+      if (CU.applyTheme && w.theme) CU.applyTheme(w.theme);
+      showWork();
+    }).catch(() => { /* server unreachable: keep the local settings */ });
+  }
+
   /* ---------- start ---------- */
   applyLanguage();
-  loadData().then(render);
+  loadShared().then(() => { applyLanguage(); return loadData(); }).then(render);
   setInterval(() => loadData().then(render), 10e3);   // new data (the poller can read every 30 s) and countdowns
 })(window.CU);
