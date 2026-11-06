@@ -85,17 +85,7 @@
       return;
     }
     const restoreFocus = CU.captureFocus($("app"));          // the page is rebuilt below: keep the keyboard focus where it was
-    const L = level();
-    const open = html => html.replace(/<details class="card chart" data-key="(\w+)"[^>]*/g, (a, k) => a + (chartsOpen[k] === false ? "" : " open"));
-    // Each level keeps everything of the level below and adds to it (UI-5):
-    // 1-3 strip, 4 the two rings in one gauge, 5 two gauges + key figures, 6 + hourly chart, 7 + ratio chart and the tokens
-    // summary, 8 full charts, 9 everything (breakdown, per-day tokens, settings), 10 = 9 + the explanations.
-    const gauges = L <= 3 ? CU.strip(m, L) : L === 4 ? CU.views.compact(m) : CU.views.detail(m);
-    const charts = L >= 7 ? ["hourly", "ratio"] : L >= 6 ? ["hourly"] : [];
-    // three columns on a wide screen (gauges, history charts, tokens), stacked when there is no room (style.css)
-    $("app").innerHTML = `<div class="dash"><div class="col col-gauges">${gauges}${L >= 9 ? CU.breakdown(m, breakdownOpen) : ""}</div>`
-      + `<div class="col col-charts">${charts.length ? open(CU.charts(m, charts, Math.min(L, 9))) : ""}</div>`
-      + `<div class="col col-tokens">${L >= 7 ? open(CU.charts(m, ["tokens"], Math.min(L, 9))) : ""}</div></div>`;
+    $("app").innerHTML = CU.compose(m, level(), { breakdownOpen, chartsOpen });
     applyNotes();
     CU.fitBars($("app"));
     CU.chartsAfterRender($("app"));
@@ -210,9 +200,9 @@
 
   /* ---------- compactness level (UI-5): slider 1-9 + "Auto" (from the width of the page, not of the screen) ---------- */
   // auto: the widest level whose threshold the width reaches (px of the page content)
-  const AUTO = [[0, 1], [200, 2], [260, 3], [330, 4], [400, 5], [520, 6], [640, 7], [760, 8], [880, 9]];
+  const AUTO = CU.LEVEL_WIDTHS;
   let autoLevel = 9;
-  const levelFor = w => AUTO.reduce((lv, [min, l]) => (w >= min ? l : lv), 1);
+  const levelFor = CU.levelFor;
   const baseLevel = () => levelPref === "auto" ? autoLevel : levelPref;
   const level = () => (baseLevel() === 9 && notesOn ? 10 : baseLevel());
   CU.level = level;

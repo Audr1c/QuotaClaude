@@ -211,4 +211,22 @@ window.CU = window.CU || {};
   };
 
   CU.views = { detail, compact };
+
+  /* ---------------- the whole page for a compactness level (UI-5); also used by the VS Code view ----------------
+     Each level keeps everything of the level below and adds to it: 1-3 strip, 4 the two rings in one gauge, 5 two
+     gauges + key figures, 6 + hourly chart, 7 + ratio chart and the tokens summary, 8 full charts, 9 everything
+     (breakdown, per-day tokens, settings), 10 = 9 + the explanations. Three columns on a wide screen (style.css). */
+  CU.compose = function (m, L, opts = {}) {
+    const chartsOpen = opts.chartsOpen || {};
+    const open = html => html.replace(/<details class="card chart" data-key="(\w+)"[^>]*/g, (a, k) => a + (chartsOpen[k] === false ? "" : " open"));
+    const gauges = L <= 3 ? CU.strip(m, L) : L === 4 ? compact(m) : detail(m);
+    const charts = L >= 7 ? ["hourly", "ratio"] : L >= 6 ? ["hourly"] : [];
+    const lv = Math.min(L, 9), hasCharts = !!CU.charts;
+    return `<div class="dash"><div class="col col-gauges">${gauges}${L >= 9 ? CU.breakdown(m, opts.breakdownOpen) : ""}</div>`
+      + `<div class="col col-charts">${hasCharts && charts.length ? open(CU.charts(m, charts, lv)) : ""}</div>`
+      + `<div class="col col-tokens">${hasCharts && L >= 7 ? open(CU.charts(m, ["tokens"], lv)) : ""}</div></div>`;
+  };
+  /* automatic level: the widest one whose minimum width (px of content) is reached */
+  CU.LEVEL_WIDTHS = [[0, 1], [200, 2], [260, 3], [330, 4], [400, 5], [520, 6], [640, 7], [760, 8], [880, 9]];
+  CU.levelFor = w => CU.LEVEL_WIDTHS.reduce((lv, [min, l]) => (w >= min ? l : lv), 1);
 })(window.CU);
