@@ -357,7 +357,7 @@ Déjà disponibles dans `latest.json` mais masqués dans le panneau depuis la re
 | `RES-1` | Relecture complète de `usage.csv` à chaque relevé : analyser les dates une fois, ou cache incrémental (≈ 3 s par relevé à 100 000 lignes) | M |
 | `RES-2` | Volume d'écriture dans `data/` à chaque relevé (surtout si le dossier est synchronisé) : n'écrire que ce qui a changé | M |
 | `RES-3` | Poller : réveil toutes les 5 s (`TICK_S`), à allonger quand il n'y a rien à surveiller ; premier palier de 30 s à reconsidérer | S |
-| `RES-4` | Widget : ne pas re-rendre toutes les 10 s si les données n'ont pas changé, pause quand l'onglet est caché (`visibilityState`) | S |
+| `RES-4` | ✅ Widget : ne pas re-rendre toutes les 10 s si les données n'ont pas changé, pause quand l'onglet est caché (`visibilityState`) | S |
 | `SEC-1` | Pas de verrou entre le serveur et le poller (deux relevés simultanés possibles) | M |
 | `SEC-2` | ✅ Machine partagée : `SO_EXCLUSIVEADDRUSE` sous Windows, droits `chmod 600` de `data/` sous Linux | S |
 | `SEC-3` | ✅ Le lanceur vérifie mieux le pid renvoyé par `/api/ping` avant de l'arrêter | S |

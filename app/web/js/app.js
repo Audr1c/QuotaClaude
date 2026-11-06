@@ -73,9 +73,23 @@
   }
 
   /* ---------- rendering ---------- */
+  const computeNow = () => CU.compute(window.CLAUDE_USAGE, Date.now(), { hoursPerDay: workOn ? hours : 24, workHours: workOn });
+  function setMeta(m) {                      // the "Updated … ago · next read in …" line
+    const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
+    const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";
+    $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) + next : "—";
+    $("meta").classList.toggle("stale", m.age > 30 * 60e3);
+  }
+  // Everything render() depends on besides the clock: if it is unchanged, the periodic tick can skip the rebuild.
+  const signature = () => {
+    const D = window.CLAUDE_USAGE || {};
+    return JSON.stringify([D.generated_at, D.fetched_at, D.error, pollerState && pollerState.next_at, level(), workOn, hours, notesOn, CU.lang]);
+  };
+  let lastSig = null, lastRender = 0;
   function render() {
     if (CU.dragging) return;                 // a chart range is being dragged: do not rebuild the page under the pointer
-    const D = window.CLAUDE_USAGE, m = CU.compute(D, Date.now(), { hoursPerDay: workOn ? hours : 24, workHours: workOn });
+    lastSig = signature(); lastRender = Date.now();
+    const D = window.CLAUDE_USAGE, m = computeNow();
     const err = $("err");
     if (!m) {
       $("app").innerHTML = `<div class="card empty">${CU.t("empty")}</div>`;
@@ -92,10 +106,7 @@
     if ($("how").open) $("how-body").innerHTML = CU.formulas(m);
     restoreFocus();
 
-    const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
-    const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";
-    $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) + next : "—";
-    $("meta").classList.toggle("stale", m.age > 30 * 60e3);
+    setMeta(m);
     err.hidden = !m.error;
     if (m.error) err.innerHTML = errorHtml(m.errorCode, m.error, m.diagnostics);
 
@@ -311,5 +322,17 @@
   /* ---------- start ---------- */
   applyLanguage();
   loadShared().then(() => { applyLanguage(); return loadData(); }).then(render);
-  setInterval(() => loadData().then(render), 10e3);   // new data (the poller can read every 30 s) and countdowns
+  // Periodic tick: new data (the poller can read every 30 s) and countdowns. Countdowns and pace markers depend on
+  // the clock, so a full rebuild still happens every 60 s; in between, an unchanged page only gets its meta line refreshed.
+  function tick() {
+    if (document.visibilityState === "hidden") return;       // nobody is looking: no fetch, no render
+    loadData().then(() => {
+      if (signature() !== lastSig || Date.now() - lastRender >= 60e3) { render(); return; }
+      if (CU.dragging) return;
+      const m = computeNow();
+      if (m) setMeta(m);
+    });
+  }
+  setInterval(tick, 10e3);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadData().then(render); });   // catch up at once
 })(window.CU);
