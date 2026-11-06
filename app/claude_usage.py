@@ -26,6 +26,7 @@ import os
 import re
 import sys
 import time
+from functools import lru_cache
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -73,13 +74,10 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def parse_dt(value) -> datetime | None:
-    """ISO 8601 (with or without fraction / Z) or epoch seconds -> UTC datetime."""
-    if value in (None, ""):
-        return None
-    if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(float(value), tz=timezone.utc)
-    s = str(value).strip().replace("Z", "+00:00")
+@lru_cache(maxsize=262144)
+def _parse_str(value: str) -> datetime | None:
+    """Parse one timestamp string. Cached: datetimes are immutable and the history repeats the same strings."""
+    s = value.strip().replace("Z", "+00:00")
     s = re.sub(r"(\.\d+)(?=[+-]\d\d:\d\d$|$)", "", s)  # Python < 3.11 rejects some fractions
     try:
         d = datetime.fromisoformat(s)
@@ -88,6 +86,15 @@ def parse_dt(value) -> datetime | None:
     if d.tzinfo is None:
         d = d.replace(tzinfo=timezone.utc)
     return d.astimezone(timezone.utc)
+
+
+def parse_dt(value) -> datetime | None:
+    """ISO 8601 (with or without fraction / Z) or epoch seconds -> UTC datetime."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), tz=timezone.utc)
+    return _parse_str(str(value))
 
 
 def iso(d: datetime | None) -> str:
@@ -373,6 +380,11 @@ def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
 
 
 def _atomic_write(path: Path, text: str) -> None:
+    try:
+        if path.read_text(encoding="utf-8") == text:
+            return          # unchanged: no write (matters on a synced folder)
+    except OSError:
+        pass
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")      # own name: the poller and the server never share a temp file
     tmp.write_text(text, encoding="utf-8")
     for attempt in range(20):
