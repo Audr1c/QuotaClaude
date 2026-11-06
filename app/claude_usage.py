@@ -633,6 +633,13 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
         log(data_dir, f"ERROR [{error_code}]{extra} (failure #{diagnostics['consecutive']} in a row) " + error)
     else:
         log(data_dir, f"OK 5h={row['five_hour_pct']}% 7d={row['seven_day_pct']}%")
+        try:                                     # HUB-1: also send it to the hub, if this PC is set up for one
+            import hub
+            failed = hub.push(data_dir, row)
+            if failed:
+                log(data_dir, f"WARNING hub push failed: {failed} (the reading is saved here)")
+        except Exception as e:
+            log(data_dir, f"WARNING hub push: {type(e).__name__}")
     return row, error, state
 
 

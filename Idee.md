@@ -46,7 +46,7 @@ Ce qui était vérifié et correct dès la 1.1.0 : écoute sur `127.0.0.1` seule
 | 8 | ✅ `API-1`, `API-2` | Socle commun : stockage unique, API de lecture versionnée, réglages côté serveur (fait) | M à L | — |
 | 9 | ✅ `THM-1` | Thème personnalisable (fait) | M | `API-2` |
 | 10 | ✅ `VSC-1` | Extension VS Code : vue latérale et indicateur dans la barre d'état (fait, à essayer dans un vrai VS Code) | M à L | `API-1`, `UI-5` |
-| 11 | `HUB-1` | Poller sur une machine toujours allumée | L | `API-1` |
+| 11 | ✅ `HUB-1` | Poller sur une machine toujours allumée (fait : option A, le PC pousse ses relevés) | L | `API-1` |
 | 12 | `AND-1` | Android : PWA d'abord, widget natif ensuite | L | `API-1`, `HUB-1` |
 
 Les quatre premières sont des retouches de la page et ne touchent ni au jeton ni aux données : elles peuvent se faire dans l'ordre, une branche chacune. `UI-5` est le gros chantier de la page : il remplace la bascule Détaillé / Compact et prépare l'affichage sur les autres plateformes (VS Code, Android). Le socle `API-1` / `API-2` est ce qui permet de garder **un seul stockage** pour tous les appareils (voir le plan plus bas).

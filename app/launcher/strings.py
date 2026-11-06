@@ -172,6 +172,11 @@ EN = {
     "setup.shortcut.explain": "One double-click (desktop, Start menu or applications menu) starts the server if needed and opens the widget, without this menu. To remove it: run.py shortcut --remove.",
     "setup.shortcut.already": "The shortcut is already there.",
     "setup.done.shortcut": "“Claude Usage” shortcut (opens the widget directly)",
+    "hub.on": "Every reading will also be sent to {url} (the Claude token stays here).",
+    "hub.off": "Readings are no longer sent to a hub.",
+    "hub.state.on": "Readings are sent to {url}.",
+    "hub.state.off": "No hub set up (readings stay on this machine).",
+    "hub.usage": "Usage: run.py hub --url http://host:8765 --token <the hub's API token>  (or --off)",
     "weekdays": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
 }
 
@@ -338,6 +343,11 @@ FR = {
     "setup.shortcut.explain": "Un double-clic (Bureau, menu Démarrer ou menu des applications) lance le serveur si besoin et ouvre le widget, sans passer par ce menu. Pour l'enlever : run.py shortcut --remove.",
     "setup.shortcut.already": "Le raccourci est déjà là.",
     "setup.done.shortcut": "raccourci « Claude Usage » (ouvre directement le widget)",
+    "hub.on": "Chaque relevé sera aussi envoyé à {url} (le jeton Claude reste ici).",
+    "hub.off": "Les relevés ne sont plus envoyés à un hub.",
+    "hub.state.on": "Les relevés sont envoyés à {url}.",
+    "hub.state.off": "Aucun hub configuré (les relevés restent sur cette machine).",
+    "hub.usage": "Utilisation : run.py hub --url http://hôte:8765 --token <le jeton d'API du hub>  (ou --off)",
     "weekdays": "lun.,mar.,mer.,jeu.,ven.,sam.,dim.",
 }
 

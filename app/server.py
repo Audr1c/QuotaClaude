@@ -22,6 +22,11 @@ Routes:
     GET  /api/v1/model[?hours=N]     -> the gauge values, limits and paces computed here (model.py), ready to draw
     GET  /api/v1/config              -> shared widget settings (settings.py)
     POST /api/v1/config              -> change some of them: JSON object, validated; same Origin rule as /api/refresh
+  Hub (HUB-1), only with --token-file:
+    POST /api/readings               -> a reading pushed by a PC (Authorization: Bearer <API token>), see hub.py
+    --bind 0.0.0.0 --allow-host nas.example.ts.net   -> reachable from other devices; then EVERY request needs the
+                                        API token: header "Authorization: Bearer ...", or open /?token=... once in a
+                                        browser (it is kept in a cookie for that address).
 
 Listens on 127.0.0.1 only: nothing is exposed to the network. Other protections: Host check (DNS rebinding),
 Sec-Fetch-Site check (a page of another site cannot read /data/ with <script src> or fetch), Origin required on POST,
@@ -41,6 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import claude_usage as cu
+import hub
 import model
 import settings
 
@@ -53,6 +59,7 @@ MIN_REFRESH_GAP_S = 20                      # POST /api/refresh inside this gap 
 _last_refresh = [0.0]
 CONFIG_POSTS = (20, 10.0)                   # at most 20 settings changes per 10 s (a slider sends a few per second)
 _config_posts: list = []
+_reading_posts: list = []
 MAX_BODY = 4096
 
 # Sent with every answer. The page has no inline script or handler, so scripts can be limited to our own files.
@@ -118,13 +125,35 @@ class Handler(BaseHTTPRequestHandler):
     def _not_found(self):
         self._json(404, {"error": "not found"})
 
+    def _client_local(self) -> bool:
+        return self.client_address[0] in ("127.0.0.1", "::1")
+
+    def _token_given(self) -> str | None:
+        auth = self.headers.get("Authorization") or ""
+        if auth.startswith("Bearer "):
+            return auth[7:].strip()
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "cu_token":
+                return v
+        return None
+
+    def _auth_ok(self) -> bool:
+        """With an API token (--token-file), every request must carry it, except the launcher's ping from this machine."""
+        tok = getattr(self.server, "api_token", None)
+        return tok is None or hub.same_token(self._token_given(), tok)
+
     def _host_ok(self) -> bool:
         """Anti DNS-rebinding: only the local address is accepted in the Host header.
         Without this, a remote page could point its domain name at 127.0.0.1
         and query this server from the browser. claude.localhost is an easier address to remember: browsers
         resolve every *.localhost name to this machine without asking any DNS server."""
         port = self.server.server_address[1]
-        return (self.headers.get("Host") or "").lower() in (f"127.0.0.1:{port}", f"localhost:{port}", f"claude.localhost:{port}")
+        host = (self.headers.get("Host") or "").lower()
+        if host in (f"127.0.0.1:{port}", f"localhost:{port}", f"claude.localhost:{port}"):
+            return True
+        # names given with --allow-host / "allowed_hosts" in config.json (a hub reached through Tailscale, a proxy...)
+        return any(host in (h, f"{h}:{port}") for h in getattr(self.server, "allowed_hosts", ()))
 
     def _fetch_ok(self) -> bool:
         """Browsers say where a request comes from (Sec-Fetch-Site). A page of another site, or of another port on this
@@ -135,8 +164,16 @@ class Handler(BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._json(403, {"error": "host refused"})
         path = self.path.split("?", 1)[0]
-        if path == "/api/ping":                 # the launcher asks without browser headers; it only says who we are
+        if path == "/api/ping" and (self._client_local() or self._auth_ok()):   # the launcher, on this machine
             return self._json(200, {"app": APP_ID, "pid": os.getpid()})
+        if not self._auth_ok():
+            given = self._query().get("token")
+            tok = getattr(self.server, "api_token", None)
+            if given and hub.same_token(given, tok) and self._fetch_ok():          # first visit from a browser
+                clean = path if path != "/" else "/web/index.html"
+                return self._send(302, b"", "text/plain", {"Location": clean,
+                                  "Set-Cookie": f"cu_token={tok}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000"})
+            return self._json(401, {"error": "API token required"})
         if not self._fetch_ok():
             return self._json(403, {"error": "cross-site request refused"})
         if path.startswith("/api/v1/"):
@@ -198,7 +235,35 @@ class Handler(BaseHTTPRequestHandler):
 
     def _origin_ok(self) -> bool:
         # Only the widget itself: a browser always sends Origin on a POST, so a missing one is not the widget.
-        return self.headers.get("Origin") == f"http://{self.headers.get('Host', '')}" and self._fetch_ok()
+        # (https too: a hub can sit behind an HTTPS reverse proxy)
+        host = self.headers.get("Host", "")
+        return self.headers.get("Origin") in (f"http://{host}", f"https://{host}") and self._fetch_ok()
+
+    def _body(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = -1
+        if n <= 0 or n > MAX_BODY:
+            raise ValueError(f"a JSON body of at most {MAX_BODY} bytes is expected")
+        return json.loads(self.rfile.read(n).decode("utf-8"))
+
+    def _post_reading(self):
+        """A reading pushed by a PC (hub.py). Needs the API token: without --token-file this route does not exist."""
+        if getattr(self.server, "api_token", None) is None:
+            return self._not_found()
+        now = time.monotonic()
+        _reading_posts[:] = [t for t in _reading_posts if now - t < 60]
+        if len(_reading_posts) >= 30:                  # the poller pushes at most every 30 s
+            return self._json(429, {"error": "too many readings"})
+        _reading_posts.append(now)
+        try:
+            payload = self._body()
+            with _refresh_lock:
+                res = hub.receive(cu.DATA_DIR, payload)
+            return self._json(200, dict(res, ok=True))
+        except (ValueError, UnicodeDecodeError) as e:
+            return self._json(400, {"error": str(e)[:200]})
 
     def _post_config(self):
         now = time.monotonic()
@@ -207,13 +272,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(429, {"error": "too many changes, wait a few seconds"})
         _config_posts.append(now)
         try:
-            n = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            n = -1
-        if n <= 0 or n > MAX_BODY:
-            return self._json(400, {"error": f"a JSON body of at most {MAX_BODY} bytes is expected"})
-        try:
-            changes = json.loads(self.rfile.read(n).decode("utf-8"))
+            changes = self._body()
             return self._json(200, {"schema": 1, "widget": settings.update(changes)})
         except (ValueError, UnicodeDecodeError) as e:
             return self._json(400, {"error": str(e)[:200]})
@@ -222,6 +281,10 @@ class Handler(BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._json(403, {"error": "host refused"})
         path = self.path.split("?", 1)[0]
+        if not self._auth_ok():
+            return self._json(401, {"error": "API token required"})
+        if path == "/api/readings":
+            return self._post_reading()
         if path not in ("/api/refresh", "/api/v1/config"):
             return self._not_found()
         if not self._origin_ok():
@@ -243,6 +306,15 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
 
+def settings_hosts() -> list:
+    """allowed_hosts of data/config.json: plain host names only."""
+    try:
+        cfg = json.loads((cu.DATA_DIR / "config.json").read_text(encoding="utf-8"))
+        return [h for h in cfg.get("allowed_hosts", []) if isinstance(h, str) and h.replace(".", "").replace("-", "").isalnum()]
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
 def ping(port: int) -> dict | None:
     """Return the /api/ping answer if OUR server listens on `port`, else None."""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # ignore system proxies
@@ -259,7 +331,14 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--open", action="store_true", help="open the widget in the browser")
     ap.add_argument("--lang", choices=("en", "fr"), help="language the widget opens in")
+    ap.add_argument("--bind", default="127.0.0.1", help="address to listen on (default 127.0.0.1: this machine only)")
+    ap.add_argument("--token-file", help="API token file (created, 0600): every request must then carry the token")
+    ap.add_argument("--allow-host", action="append", default=[], help="extra Host name accepted (repeatable)")
     args = ap.parse_args()
+    loopback = args.bind in ("127.0.0.1", "localhost", "::1")
+    if not loopback and not args.token_file:
+        print("Refusing to listen on", args.bind, "without --token-file: anyone on the network could read your data.")
+        return 2
     url = f"http://127.0.0.1:{args.port}/web/index.html" + (f"?lang={args.lang}" if args.lang else "")
 
     if ping(args.port):
@@ -268,10 +347,14 @@ def main() -> int:
             webbrowser.open(url)
         return 0
     try:
-        srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+        srv = ThreadingHTTPServer((args.bind, args.port), Handler)
     except OSError as e:
         print(f"Cannot listen on port {args.port}: {e}. Try --port 8766.")
         return 1
+    srv.api_token = hub.ensure_token(Path(args.token_file)) if args.token_file else None
+    srv.allowed_hosts = tuple(h.lower() for h in args.allow_host + list(settings_hosts()))
+    if srv.api_token:
+        print(f"API token required (file {args.token_file}). Open /?token=<token> once in a browser.")
     print(f"Widget: {url}   (Ctrl+C to stop)")
     if args.open:
         threading.Timer(0.4, webbrowser.open, [url]).start()

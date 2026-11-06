@@ -376,6 +376,36 @@ def make_shortcut(ui: Ui, remove: bool = False) -> bool:
     return True
 
 
+def hub_setup(ui: Ui, url: str | None, token: str | None, off: bool) -> bool:
+    """HUB-1 on the PC: push every reading to a hub (an always-on machine running server.py --token-file)."""
+    cfg = load_config()
+    if off:
+        cfg.pop("hub", None)
+        save_config(cfg)
+        try:
+            (DATA / "hub_token").unlink()
+        except OSError:
+            pass
+        ui.say("hub.off")
+        return True
+    if not url:
+        hub_cfg = cfg.get("hub") or {}
+        print(ui.t("hub.state.on", url=hub_cfg["url"]) if hub_cfg.get("url") else ui.t("hub.state.off"))
+        return True
+    if not (url.startswith("http://") or url.startswith("https://")) or not token:
+        ui.say("hub.usage")
+        return False
+    DATA.mkdir(parents=True, exist_ok=True)
+    path = DATA / "hub_token"
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)      # a secret: rights 0600
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(token.strip() + "\n")
+    cfg["hub"] = {"url": url.rstrip("/")}
+    save_config(cfg)
+    ui.say("hub.on", url=url.rstrip("/"))
+    return True
+
+
 def run_tests(ui: Ui) -> bool:
     ui.say("tests.running")
     code = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", str(ROOT), "-p", "test_*.py"],
@@ -653,6 +683,10 @@ def build_parser() -> argparse.ArgumentParser:
     inst = sub.add_parser("install", help="set up automatic readings in the background (adaptive timing, 30 s to 10 min)")
     inst.add_argument("--with-server", action="store_true", help="also start the widget server at login")
     sub.add_parser("uninstall", help="remove automatic readings (your data is kept)")
+    hb = sub.add_parser("hub", help="send every reading to a hub (an always-on machine running the server)")
+    hb.add_argument("--url", help="the hub's address, e.g. http://nas.tailnet.ts.net:8765")
+    hb.add_argument("--token", help="the hub's API token (its data/api_token file)")
+    hb.add_argument("--off", action="store_true", help="stop sending readings to the hub")
     sc = sub.add_parser("shortcut", help="create a desktop / menu shortcut that opens the widget directly")
     sc.add_argument("--remove", action="store_true", help="remove that shortcut")
     return p
@@ -703,6 +737,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if install_task(ui, args.with_server) else 1
         if args.cmd == "uninstall":
             return 0 if remove_task(ui) else 1
+        if args.cmd == "hub":
+            return 0 if hub_setup(ui, args.url, args.token, args.off) else 1
         if args.cmd == "shortcut":
             return 0 if make_shortcut(ui, remove=args.remove) else 1
     except KeyboardInterrupt:
