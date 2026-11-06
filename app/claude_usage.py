@@ -19,6 +19,7 @@ it may change). The OAuth token is read from ~/.claude/.credentials.json
 """
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import os
@@ -611,7 +612,78 @@ def log(data_dir: Path, msg: str) -> None:
 
 # --------------------------------------------------------------------------- entry point
 
+READING_LOCK_NAME = "reading.lock"
+READING_LOCK_TIMEOUT_S = 30.0
+
+
+def _try_lock(fh) -> bool:
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _unlock(fh) -> None:
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+@contextlib.contextmanager
+def reading_lock(data_dir: Path, timeout: float):
+    """Cross-process lock (data/reading.lock) so that two readings never run at the same time.
+
+    Waits up to `timeout` seconds; yields True when the lock is held, False on timeout.
+    """
+    data_dir.mkdir(parents=True, exist_ok=True)
+    fh = open(data_dir / READING_LOCK_NAME, "a+")
+    held = False
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            held = _try_lock(fh)
+            if held or time.monotonic() >= deadline:
+                break
+            time.sleep(0.1)
+        yield held
+    finally:
+        if held:
+            _unlock(fh)
+        fh.close()
+
+
 def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | None = None):
+    """One complete reading, serialised across processes by `reading_lock`.
+
+    If another reading holds the lock for more than READING_LOCK_TIMEOUT_S, returns the saved state
+    with error code "busy" instead.
+    """
+    with reading_lock(data_dir, READING_LOCK_TIMEOUT_S) as held:
+        if not held:
+            try:
+                state = json.loads((data_dir / "latest.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                state = {}
+            state["error_code"] = "busy"
+            return None, "Another reading is still in progress.", state
+        return _run_locked(data_dir, payload, now)
+
+
+def _run_locked(data_dir: Path, payload: dict | None, now: datetime | None):
     """One complete reading. `payload` lets tests inject an API response.
 
     Returns (row or None, error message or None, state dict).
