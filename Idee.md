@@ -359,8 +359,8 @@ Déjà disponibles dans `latest.json` mais masqués dans le panneau depuis la re
 | `RES-3` | Poller : réveil toutes les 5 s (`TICK_S`), à allonger quand il n'y a rien à surveiller ; premier palier de 30 s à reconsidérer | S |
 | `RES-4` | Widget : ne pas re-rendre toutes les 10 s si les données n'ont pas changé, pause quand l'onglet est caché (`visibilityState`) | S |
 | `SEC-1` | Pas de verrou entre le serveur et le poller (deux relevés simultanés possibles) | M |
-| `SEC-2` | Machine partagée : `SO_EXCLUSIVEADDRUSE` sous Windows, droits `chmod 600` de `data/` sous Linux | S |
-| `SEC-3` | Le lanceur vérifie mieux le pid renvoyé par `/api/ping` avant de l'arrêter | S |
+| `SEC-2` | ✅ Machine partagée : `SO_EXCLUSIVEADDRUSE` sous Windows, droits `chmod 600` de `data/` sous Linux | S |
+| `SEC-3` | ✅ Le lanceur vérifie mieux le pid renvoyé par `/api/ping` avant de l'arrêter | S |
 | `DAT-1` | Le premier relevé d'une nouvelle fenêtre de 5 h n'est pas compté dans l'usage par heure ni dans le ratio | S |
 | `DAT-2` | Jours UTC (tokens, ratio) contre jours locaux (répartition par produit, usage par heure) : harmoniser ou le dire dans les libellés | M |
 | `DAT-3` | Année absente des libellés de plage au-delà d'un an | S |

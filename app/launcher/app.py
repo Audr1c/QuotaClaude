@@ -154,6 +154,24 @@ def open_widget(ui: Ui, browser: bool = True) -> bool:
     return False
 
 
+def _pid_refusal(pid) -> str | None:
+    """Return a reason not to kill `pid`, or None if it plausibly is our server."""
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 1:
+        return "invalid pid"
+    if pid == os.getpid():
+        return "pid is the launcher itself"
+    # On Windows os.kill terminates the process and there is no cheap command-line check: keep it as is.
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmdline = f.read()
+        except OSError:
+            return None                                   # /proc unreadable: cannot check further
+        if b"server.py" not in cmdline:
+            return "pid does not belong to server.py"
+    return None
+
+
 def stop_server(ui: Ui) -> bool:
     info = ping(DEFAULT_PORT)
     if not info:
@@ -163,8 +181,12 @@ def stop_server(ui: Ui) -> bool:
     if not pid:
         ui.say("stop.nopid")
         return False
+    reason = _pid_refusal(pid)
+    if reason:
+        print(ui.t("stop.fail", msg=reason))
+        return False
     try:
-        os.kill(int(pid), signal.SIGTERM)                 # the pid comes from our own verified server
+        os.kill(pid, signal.SIGTERM)
     except OSError as e:
         print(ui.t("stop.fail", msg=str(e)))
         return False

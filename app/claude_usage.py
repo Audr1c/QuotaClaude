@@ -598,6 +598,11 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
     """
     now = now or now_utc()
     data_dir.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        try:
+            os.chmod(data_dir, 0o700)                         # keep other users of a shared machine out
+        except OSError:
+            pass
     row, error, error_code, breakdown, failure = None, None, None, None, None
     try:
         if payload is None:

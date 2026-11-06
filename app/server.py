@@ -38,6 +38,7 @@ import argparse
 import importlib
 import json
 import os
+import socket
 import threading
 import time
 import urllib.request
@@ -326,6 +327,19 @@ def ping(port: int) -> dict | None:
         return None
 
 
+class ExclusiveHTTPServer(ThreadingHTTPServer):
+    """On Windows, refuse to share the port with another user's process (SO_EXCLUSIVEADDRUSE)."""
+
+    if os.name == "nt":
+        allow_reuse_address = False
+
+    def server_bind(self):
+        opt = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+        if os.name == "nt" and opt is not None:
+            self.socket.setsockopt(socket.SOL_SOCKET, opt, 1)
+        super().server_bind()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Local server for the Claude usage widget")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -347,7 +361,7 @@ def main() -> int:
             webbrowser.open(url)
         return 0
     try:
-        srv = ThreadingHTTPServer((args.bind, args.port), Handler)
+        srv = ExclusiveHTTPServer((args.bind, args.port), Handler)
     except OSError as e:
         print(f"Cannot listen on port {args.port}: {e}. Try --port 8766.")
         return 1
