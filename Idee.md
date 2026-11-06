@@ -7,7 +7,7 @@ Contraintes communes : l'endpoint `GET /api/oauth/usage` n'est pas documenté (i
 | Famille | Codes | Sujet |
 |---|---|---|
 | ONB | `ONB-1` | Première utilisation et menu |
-| UI | `UI-1` à `UI-4` | Page web : textes, mise en page, réglages, cadrans |
+| UI | `UI-1` à `UI-5` | Page web : textes, mise en page, réglages, cadrans, niveaux de compacité |
 | ACC | `ACC-1` | Lancer et voir le widget plus facilement |
 | API | `API-1`, `API-2` | Socle commun à tous les clients (stockage unique, API, réglages partagés) |
 | CLI | `THM-1`, `VSC-1`, `AND-1`, `HUB-1` | Thème, extension VS Code, Android, poller distant |
@@ -40,15 +40,16 @@ Ce qui était vérifié et correct dès la 1.1.0 : écoute sur `127.0.0.1` seule
 | 2 | `UI-1` | Textes d'aide : raccourcir, supprimer les doublons, pouvoir les masquer | S à M | — |
 | 3 | `UI-4` | Graduations de temps sur les deux cadrans | M | `UI-3` (pour la semaine) |
 | 4 | `UI-2` | Page qui utilise la largeur, compatible tactile, vue compacte lisible | M à L | `UI-1` |
-| 5 | `ONB-1` | Assistant de première utilisation et menu plus clair | M | — |
-| 6 | `ACC-1` | Lancer et ouvrir le widget sans terminal | M | `ONB-1` |
-| 7 | `API-1`, `API-2` | Socle commun : stockage unique, API de lecture versionnée, réglages côté serveur | M à L | — |
-| 8 | `THM-1` | Thème personnalisable | M | `API-2` |
-| 9 | `VSC-1` | Extension VS Code | M | `API-1` |
-| 10 | `HUB-1` | Poller sur une machine toujours allumée | L | `API-1` |
-| 11 | `AND-1` | Android : PWA d'abord, widget natif ensuite | L | `API-1`, `HUB-1` |
+| 5 | `UI-5` | Curseur de compacité (une dizaine de crans) et niveau choisi selon la largeur | L | `UI-1`, `UI-2` |
+| 6 | `ONB-1` | Assistant de première utilisation et menu plus clair | M | — |
+| 7 | `ACC-1` | Lancer et ouvrir le widget sans terminal | M | `ONB-1` |
+| 8 | `API-1`, `API-2` | Socle commun : stockage unique, API de lecture versionnée, réglages côté serveur | M à L | — |
+| 9 | `THM-1` | Thème personnalisable | M | `API-2` |
+| 10 | `VSC-1` | Extension VS Code : vue latérale et indicateur dans la barre d'état | M à L | `API-1`, `UI-5` |
+| 11 | `HUB-1` | Poller sur une machine toujours allumée | L | `API-1` |
+| 12 | `AND-1` | Android : PWA d'abord, widget natif ensuite | L | `API-1`, `HUB-1` |
 
-Les quatre premières sont des retouches de la page et ne touchent ni au jeton ni aux données : elles peuvent se faire dans l'ordre, une branche chacune. Le socle `API-1` / `API-2` est ce qui permet de garder **un seul stockage** pour tous les appareils (voir le plan plus bas).
+Les quatre premières sont des retouches de la page et ne touchent ni au jeton ni aux données : elles peuvent se faire dans l'ordre, une branche chacune. `UI-5` est le gros chantier de la page : il remplace la bascule Détaillé / Compact et prépare l'affichage sur les autres plateformes (VS Code, Android). Le socle `API-1` / `API-2` est ce qui permet de garder **un seul stockage** pour tous les appareils (voir le plan plus bas).
 
 ---
 
@@ -84,7 +85,8 @@ Les quatre premières sont des retouches de la page et ne touchent ni au jeton n
 **Objectif.** Garder les explications, mais plus brèves, sans répétition, et pouvoir les masquer d'un geste une fois lues.
 
 **Esquisse.**
-- **Interrupteur global « Explications »** dans l'en-tête (activé par défaut), mémorisé dans `localStorage` (puis dans les réglages serveur, voir `API-2`). Quand il est coupé, toutes les notes `.note`, les `.hint` longs et la légende du pied de page disparaissent.
+- **Interrupteur global « Explications »** dans l'en-tête (activé par défaut), mémorisé dans `localStorage` (puis dans les réglages serveur, voir `API-2`). Quand il est coupé, toutes les notes `.note`, les `.hint` longs et la légende du pied de page disparaissent. Avec `UI-5`, cet interrupteur devient le dernier cran du curseur de compacité.
+- **« Comment c'est calculé » dans un bouton « ? »** en haut à droite de la page : il ouvre un encart (fenêtre flottante ou panneau latéral) au lieu d'occuper un panneau entier en bas de page.
 - **Une icône « ? » par panneau** pour afficher ou masquer sa propre note sans toucher au reste.
 - **Raccourcir** chaque note à une ou deux phrases ; le détail complet reste dans « Comment c'est calculé ».
 - **Doublons à supprimer** (repérés sur la 1.1.1) :
@@ -112,7 +114,7 @@ Les quatre premières sont des retouches de la page et ne touchent ni au jeton n
   - moyen (≥ 900 px) : les deux cadrans côte à côte, puis les graphiques « Usage par heure » et « Ratio » côte à côte ;
   - large (≥ 1300 px) : trois colonnes (cadrans, graphiques, tokens), le curseur d'heures rangé dans l'en-tête ;
   - on garde l'empilement quand il n'y a pas la place.
-- **Vue compacte** : un mode « widget » qui remplit toute la fenêtre (les anneaux et les chiffres s'agrandissent avec la fenêtre, peu d'éléments), prévu pour une petite fenêtre épinglée ou un second écran, au lieu de réduire la largeur maximale.
+- **Vue compacte** (à terme remplacée par les crans de `UI-5`) : un mode « widget » qui remplit toute la fenêtre (les anneaux et les chiffres s'agrandissent avec la fenêtre, peu d'éléments), prévu pour une petite fenêtre épinglée ou un second écran, au lieu de réduire la largeur maximale.
 - **Tactile** :
   - zones de toucher d'au moins 44 px (poignées de la mini-vue, boutons de plage) ;
   - un appui sur une barre ou un point affiche une infobulle (les `title` n'existent pas au toucher) ;
@@ -162,6 +164,44 @@ Les quatre premières sont des retouches de la page et ne touchent ni au jeton n
 - Fuseau : minuits locaux du navigateur.
 
 **Premier pas.** Les traits de 15 minutes sur l'anneau 5 h, dans `gauge.js` (fonction `ticks`).
+
+---
+
+### `UI-5` · Curseur de compacité à une dizaine de crans
+
+**Problème.** Il n'y a que deux vues, Détaillé et Compact. Rien entre les deux, et rien de plus petit que la vue compacte : impossible de caser le widget dans une bande étroite (barre latérale de VS Code, écran d'accueil d'un téléphone, coin d'écran).
+
+**Objectif.** Remplacer la bascule par un **curseur à une dizaine de crans**, du plus compact au plus détaillé. Chaque cran garde **toute** l'information du cran précédent et en ajoute, sans empiéter sur ce qui était déjà là. Quand on descend d'un cran de compacité, on voit la même information de façon encore plus claire, plus un peu d'information en plus.
+
+**Crans proposés** (à affiner en maquettant ; la frontière entre deux crans peut bouger) :
+
+| Cran | Ce qui s'affiche |
+|---|---|
+| 1 | **Liseré** : deux fines barres aux couleurs des anneaux (5 h, semaine), remplies au % utilisé ; éventuellement une 3ᵉ barre empilée avec la répartition des tokens (entrée fraîche, écriture de cache, lecture de cache, sortie) |
+| 2 | Les mêmes barres avec le % écrit et le repère de rythme |
+| 3 | + heure de réinitialisation de chaque fenêtre |
+| 4 | Les **deux cadrans** remplacent les barres (petits, chiffres au centre) |
+| 5 | Cadrans plus grands + chiffres clés (budget du jour, rythme, limite conseillée) |
+| 6 | + graphique « Usage par heure » en version réduite (sans axes détaillés ni mini-vue) |
+| 7 | + graphique « Ratio 5 h → semaine » réduit, + résumé du panneau Tokens |
+| 8 | Graphiques complets (axes, sélecteur de plage, mini-vue glissable) |
+| 9 | **Tout** : tableau par jour des tokens, répartition par produit, réglages, etc. |
+| 10 · Explications | Cran **à part**, séparé visuellement des autres : tout le cran 9, plus toutes les petites notes qui expliquent chaque graphique et comment il est calculé (remplace l'interrupteur « Explications » de `UI-1`) |
+
+**Règles de conception.**
+- **Hiérarchie stricte** : un élément présent à un cran l'est à tous les crans moins compacts, au même endroit ou en plus grand. On ajoute, on ne remplace pas une information par une autre.
+- **Chaque graphique a ses versions réduites** : c'est le gros du travail. Pour chaque graphique, décider ce qu'on retire en premier (légende, axes, étiquettes, mini-vue…) pour ne garder à la fin que l'essentiel, et optimiser l'espace à chaque cran.
+- **Composants paramétrés par le cran** (`level` passé à `gauge.js`, `charts.js`, etc.) plutôt que du CSS qui masque des éléments : ces mêmes composants serviront à l'extension VS Code (`VSC-1`) et à Android (`AND-1`).
+- « Comment c'est calculé » reste accessible à tous les crans par le bouton « ? » en haut à droite (voir `UI-1`), sauf au cran 1 où il n'y a pas la place.
+
+**Cran par défaut selon la largeur.**
+- Mode **« Auto »** (par défaut) : le cran est choisi d'après la largeur disponible au démarrage et quand la fenêtre change de taille (`ResizeObserver` sur le conteneur, pas sur l'écran), avec des seuils à définir (par exemple < 200 px → cran 1, < 400 px → cran 4…).
+- Si l'utilisateur bouge le curseur, son choix est retenu (`localStorage`, puis `API-2`) ; un bouton « Auto » revient au choix automatique.
+- Même logique pour la vue latérale de VS Code, dont la largeur de la bande décide du cran.
+
+**Risques.** Beaucoup de combinaisons à tester (10 crans × clair/sombre × largeurs) ; garder des captures de référence par cran. Les tests i18n doivent couvrir les nouveaux libellés.
+
+**Premier pas.** Inventaire : pour chaque élément de la page, à partir de quel cran il apparaît. Puis le curseur avec trois crans seulement (liseré, cadrans, tout) branché sur la vue actuelle, et le mode Auto.
 
 ---
 
@@ -240,17 +280,21 @@ Les quatre premières sont des retouches de la page et ne touchent ni au jeton n
 
 ### `VSC-1` · Extension VS Code (ancienne idée 3)
 
-**Objectif.** Suivre le quota sans quitter l'éditeur : vue latérale et élément compact dans la barre d'état.
+**Objectif.** Suivre le quota sans quitter l'éditeur : vue latérale (bandeau sur le côté gauche) et petit indicateur en bas à droite dans la barre d'état.
 
 **Esquisse.**
 - Source : `app/data/latest.json` en local (lecture de fichier avec `fs.watch`, aucune requête réseau), ou `/api/v1/latest` quand le hub est distant (réglage `claudeUsage.source`). Même stockage que le widget : l'extension ne collecte rien.
-- Vue latérale : `WebviewViewProvider` réutilisant `gauge.js` et le CSS du widget (variables mappées vers `--vscode-*`).
-- Barre d'état : texte `5h 42 % | sem 18 %`, infobulle avec les heures de réinitialisation, couleur `statusBarItem.warningBackground` / `errorBackground` selon les seuils, grisée si la donnée est ancienne.
+- Vue latérale : `WebviewViewProvider` réutilisant `gauge.js` et le CSS du widget (variables mappées vers `--vscode-*`). Le cran de compacité (`UI-5`) suit la **largeur de la bande** : bande étroite → barres ou petits cadrans, bande large → graphiques.
+- Indicateur dans la barre d'état, en bas à droite, avec trois niveaux de détail :
+  - **au repos** : les deux petites barres (comme le cran 1 de `UI-5`) avec le % de la fenêtre 5 h et le % des 7 jours, par exemple `▰▰▱ 42 % · ▰▱▱ 18 %` ; couleur `statusBarItem.warningBackground` / `errorBackground` selon les seuils, grisé si la donnée est ancienne ;
+  - **au survol** : une infobulle avec un peu plus d'informations (heures de réinitialisation, rythme, heure du dernier relevé), sans tout montrer ;
+  - **au clic** : une vue plus grande avec plus d'informations (ouvre la vue latérale ou un panneau à un cran plus détaillé).
+- Les barres de la barre d'état sont du texte (caractères ou icônes `$(…)`) : pas de dessin libre possible à cet endroit dans VS Code, à vérifier en maquettant.
 - Réglages `contributes.configuration` : gabarit du texte, seuils, intervalle de lecture.
 
 **Risques.** Le poller doit tourner (l'extension ne fait que lire) ; CSP stricte des webviews (pas de script inline, `asWebviewUri`) ; un `.vsix` local suffit, pas de Marketplace.
 
-**Premier pas.** Un élément de barre d'état qui lit `latest.json` et affiche le pourcentage 5 h.
+**Premier pas.** Un élément de barre d'état qui lit `latest.json` et affiche les deux pourcentages, avec l'infobulle au survol.
 
 ---
 
