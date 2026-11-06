@@ -1,4 +1,4 @@
-/* app.js: data loading, view and language switches, refresh button, auto-refresh.
+/* app.js: data loading, compactness level, language switch, refresh button, auto-refresh.
    Two modes:
      - through the local server (http://127.0.0.1:8765): data as JSON + the Refresh button works;
      - file opened directly (file://): data via data/latest.js, Refresh button disabled. */
@@ -11,26 +11,26 @@
   }
 
   const SERVED = location.protocol.startsWith("http");
-  const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen", FORMULAS_KEY = "cu.formulasOpen";
-  const HOURS_KEY = "cu.hours";
+  const LEVEL_KEY = "cu.level", BREAKDOWN_KEY = "cu.breakdownOpen", NOTES_KEY = "cu.notes";
+  const HOURS_KEY = "cu.hours", WORK_KEY = "cu.workHours";
   const chartsOpen = {};
-  let view = "detail", breakdownOpen = false, formulasOpen = false, hours = 8;
+  let levelPref = "auto", breakdownOpen = false, notesOn = true, hours = 8, workOn = false;
   try {
     const saved = parseInt(localStorage.getItem(HOURS_KEY), 10);
     if (saved >= 1 && saved <= 24) hours = saved;
-    view = localStorage.getItem(VIEW_KEY) || "detail";
+    const lv = parseInt(localStorage.getItem(LEVEL_KEY), 10);
+    if (lv >= 1 && lv <= 9) levelPref = lv;
     breakdownOpen = localStorage.getItem(BREAKDOWN_KEY) === "1";
-    formulasOpen = localStorage.getItem(FORMULAS_KEY) === "1";
+    notesOn = localStorage.getItem(NOTES_KEY) !== "0";
+    workOn = localStorage.getItem(WORK_KEY) === "1";
   } catch (e) { /* storage unavailable */ }
-  if (!CU.views[view]) view = "detail";
 
   // the breakdown <details> is recreated on every render: remember whether it is open
   $("app").addEventListener("toggle", e => {
     if (e.target.classList.contains("chart")) { chartsOpen[e.target.dataset.key] = e.target.open; return; }
-    const isFormulas = e.target.classList.contains("formulas");
-    if (!isFormulas && !e.target.classList.contains("breakdown")) return;
-    if (isFormulas) formulasOpen = e.target.open; else { breakdownOpen = e.target.open; CU.fitBars(e.target); }
-    try { localStorage.setItem(isFormulas ? FORMULAS_KEY : BREAKDOWN_KEY, e.target.open ? "1" : "0"); } catch (err) { /* ignore */ }
+    if (!e.target.classList.contains("breakdown")) return;
+    breakdownOpen = e.target.open; CU.fitBars(e.target);
+    try { localStorage.setItem(BREAKDOWN_KEY, e.target.open ? "1" : "0"); } catch (err) { /* ignore */ }
   }, true);
 
   /* ---------- data ---------- */
@@ -73,33 +73,43 @@
   }
 
   /* ---------- rendering ---------- */
+  const computeNow = () => CU.compute(window.CLAUDE_USAGE, Date.now(), { hoursPerDay: workOn ? hours : 24, workHours: workOn });
+  function setMeta(m) {                      // the "Updated … ago · next read in …" line
+    const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
+    const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";
+    $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) + next : "—";
+    $("meta").classList.toggle("stale", m.age > 30 * 60e3);
+  }
+  // Everything render() depends on besides the clock: if it is unchanged, the periodic tick can skip the rebuild.
+  const signature = () => {
+    const D = window.CLAUDE_USAGE || {};
+    return JSON.stringify([D.generated_at, D.fetched_at, D.error, pollerState && pollerState.next_at, level(), workOn, hours, notesOn, CU.lang]);
+  };
+  let lastSig = null, lastRender = 0;
   function render() {
     if (CU.dragging) return;                 // a chart range is being dragged: do not rebuild the page under the pointer
-    const D = window.CLAUDE_USAGE, m = CU.compute(D, Date.now(), { hoursPerDay: hours });
+    lastSig = signature(); lastRender = Date.now();
+    const D = window.CLAUDE_USAGE, m = computeNow();
     const err = $("err");
     if (!m) {
       $("app").innerHTML = `<div class="card empty">${CU.t("empty")}</div>`;
       err.hidden = !(D && D.error);
       if (D && D.error) err.innerHTML = errorHtml(D.error_code, D.error, D.diagnostics);
-      $("foot").textContent = "";
       $("meta").textContent = "—";
       return;
     }
     const restoreFocus = CU.captureFocus($("app"));          // the page is rebuilt below: keep the keyboard focus where it was
-    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.charts(m).replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : "")) + CU.formulas(m, formulasOpen);
+    $("app").innerHTML = CU.compose(m, level(), { breakdownOpen, chartsOpen });
+    applyNotes();
     CU.fitBars($("app"));
     CU.chartsAfterRender($("app"));
+    if ($("how").open) $("how-body").innerHTML = CU.formulas(m);
     restoreFocus();
 
-    const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
-    const next = wait > -60e3 ? " · " + CU.t("meta.next", { left: wait < 60e3 ? Math.max(0, Math.round(wait / 1e3)) + " s" : CU.fmt.left(wait) }) : "";
-    $("meta").textContent = m.fetched ? CU.t("meta.updated", { ago: CU.fmt.left(m.age), n: m.samples }) + next : "—";
-    $("meta").classList.toggle("stale", m.age > 30 * 60e3);
+    setMeta(m);
     err.hidden = !m.error;
     if (m.error) err.innerHTML = errorHtml(m.errorCode, m.error, m.diagnostics);
 
-    const source = m.ratioEstimated ? CU.t("foot.estimated", { pts: m.ratioPoints }) : CU.t("foot.default");
-    $("foot").innerHTML = CU.t("foot.ratio", { ratio: CU.fmt.pct(m.ratio, 1), source }) + "<br>" + CU.t("foot.limit");
   }
 
   /* ---------- hours-per-day slider (side panel, outside #app so re-renders never reset it) ---------- */
@@ -121,30 +131,136 @@
   slider.addEventListener("input", () => {
     hours = parseInt(slider.value, 10) || 8;
     try { localStorage.setItem(HOURS_KEY, String(hours)); } catch (e) { /* ignore */ }
+    share({ hours });
     showHours();
     render();
   });
 
-  /* ---------- view switch (detailed / compact) ---------- */
-  function setView(v) {
-    view = CU.views[v] ? v : "detail";
-    try { localStorage.setItem(VIEW_KEY, view); } catch (e) { /* ignore */ }
-    document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
-    document.body.dataset.view = view;
-    render();
+  /* ---------- explanations: one global switch, plus a "?" per panel that flips its own note ----------
+     A note is shown when the global switch is on, unless its panel's "?" hid it (and the other way round).
+     The per-panel choices last until the global switch is used again. */
+  const noteFlip = {};
+  function applyNotes() {
+    const on = level() === 10;
+    $("notes").setAttribute("aria-pressed", String(on));
+    document.querySelectorAll("[data-note]").forEach(n => { n.hidden = on === !!noteFlip[n.dataset.note]; });
+    document.querySelectorAll("[data-note-for]").forEach(b => {
+      b.setAttribute("aria-pressed", String(on !== !!noteFlip[b.dataset.noteFor]));
+    });
   }
-  document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+  // "Explanations" = the 10th notch, apart from the slider: from a lower level it jumps to 9 + explanations
+  $("notes").addEventListener("click", () => {
+    if (baseLevel() < 9) { levelPref = 9; notesOn = true; } else notesOn = !notesOn;
+    for (const k in noteFlip) delete noteFlip[k];
+    try { localStorage.setItem(NOTES_KEY, notesOn ? "1" : "0"); localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
+    share({ notes: notesOn, level: levelPref });
+    showLevel(); render();
+  });
+  $("app").addEventListener("click", e => {
+    const b = e.target.closest && e.target.closest("[data-note-for]");
+    if (!b) return;
+    e.preventDefault();                        // the button sits in a <summary>: do not let it fold the panel
+    const key = b.dataset.noteFor, d = b.closest("details");
+    noteFlip[key] = !noteFlip[key];
+    if (d && !d.open && (level() === 10) !== noteFlip[key]) d.open = true;    // showing the note of a folded panel opens it
+    applyNotes();
+  });
+
+  /* ---------- tooltips that also work on a touch screen: a tap (or click) shows the element's title ---------- */
+  const tip = document.createElement("div");
+  tip.className = "tip"; tip.hidden = true; tip.setAttribute("role", "status");
+  document.body.appendChild(tip);
+  const titleOf = el => el.getAttribute("title") || (el.querySelector && el.querySelector(":scope > title") ? el.querySelector(":scope > title").textContent : "");
+  document.addEventListener("click", e => {
+    if (Date.now() - (CU.tipSuppress || 0) < 400) return;            // the end of a drag on a chart is not a tap
+    const el = e.target.closest && e.target.closest("#app svg.plot rect, #app svg.plot circle, #app .bars .day, #app .share span, #app .tbar span");
+    const text = el && titleOf(el);
+    if (!text) { tip.hidden = true; return; }
+    tip.textContent = text; tip.hidden = false;
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth;
+    tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + "px";
+    tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + scrollY + "px";
+  });
+  window.addEventListener("scroll", () => { tip.hidden = true; }, { passive: true });
+
+  /* ---------- "how it is computed": a floating panel opened by the "?" button ---------- */
+  const how = $("how");
+  $("how-open").addEventListener("click", () => {
+    const m = CU.compute(window.CLAUDE_USAGE, Date.now(), { hoursPerDay: workOn ? hours : 24, workHours: workOn });
+    $("how-body").innerHTML = m ? CU.formulas(m) : `<p class="lead">${CU.t("empty")}</p>`;
+    if (how.showModal) how.showModal(); else how.setAttribute("open", "");
+  });
+  $("how-close").addEventListener("click", () => how.close ? how.close() : how.removeAttribute("open"));
+  how.addEventListener("click", e => { if (e.target === how && how.close) how.close(); });     // click on the backdrop
+
+  /* ---------- working-hours switch: off = the week's pace follows calendar time (24 h a day), slider hidden ---------- */
+  const workBox = $("work-on");
+  function showWork() {
+    workBox.checked = workOn;
+    $("hours-panel").hidden = !workOn;
+    $("hours-box").classList.toggle("off", !workOn);
+  }
+  workBox.addEventListener("change", () => {
+    workOn = workBox.checked;
+    try { localStorage.setItem(WORK_KEY, workOn ? "1" : "0"); } catch (e) { /* ignore */ }
+    share({ work_hours: workOn });
+    showWork();
+    render();
+  });
+  showWork();
+
+  /* ---------- compactness level (UI-5): slider 1-9 + "Auto" (from the width of the page, not of the screen) ---------- */
+  // auto: the widest level whose threshold the width reaches (px of the page content)
+  const AUTO = CU.LEVEL_WIDTHS;
+  let autoLevel = 9;
+  const levelFor = CU.levelFor;
+  const baseLevel = () => levelPref === "auto" ? autoLevel : levelPref;
+  const level = () => (baseLevel() === 9 && notesOn ? 10 : baseLevel());
+  CU.level = level;
+  const levelInput = $("level");
+  function showLevel() {
+    const b = baseLevel(), L = level();
+    levelInput.value = b;
+    $("level-value").textContent = CU.t("level.value", { n: b });
+    levelInput.setAttribute("aria-valuetext", CU.t("level.value", { n: b }) + (L === 10 ? " + " + CU.t("notes.label") : ""));
+    $("level-auto").setAttribute("aria-pressed", String(levelPref === "auto"));
+    document.body.dataset.level = L;
+    $("hours-box").hidden = L < 9;                     // settings belong to the "everything" level
+  }
+  levelInput.addEventListener("input", () => {
+    levelPref = parseInt(levelInput.value, 10) || 9;
+    try { localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
+    share({ level: levelPref });
+    showLevel(); render();
+  });
+  $("level-auto").addEventListener("click", () => {
+    levelPref = "auto";
+    try { localStorage.removeItem(LEVEL_KEY); } catch (e) { /* ignore */ }
+    share({ level: "auto" });
+    measure(); showLevel(); render();
+  });
+  function measure() {                               // a small dead band around each threshold: no flicker on a scrollbar
+    const w = document.querySelector(".wrap").clientWidth - 32, next = levelFor(w);
+    if (next === autoLevel) return false;
+    const edge = AUTO.find(([min]) => min > 0 && Math.abs(w - min) < 12);
+    if (edge && Math.abs(next - autoLevel) === 1) return false;
+    autoLevel = next;
+    return true;
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => { if (measure() && levelPref === "auto") { showLevel(); render(); } }).observe(document.querySelector(".wrap"));
+  autoLevel = levelFor(document.querySelector(".wrap").clientWidth - 32);
 
   /* ---------- language switch ---------- */
   const refreshBtn = $("refresh");
   function applyLanguage() {
     CU.applyStatic();
     showHours();
+    showLevel();
     document.querySelectorAll("[data-lang]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === CU.lang)));
     if (!SERVED) refreshBtn.title = CU.t("refresh.disabled");
     render();
   }
-  document.querySelectorAll("[data-lang]").forEach(b => b.addEventListener("click", () => { CU.setLang(b.dataset.lang); applyLanguage(); }));
+  document.querySelectorAll("[data-lang]").forEach(b => b.addEventListener("click", () => { CU.setLang(b.dataset.lang); share({ lang: CU.lang }); applyLanguage(); }));
 
   /* ---------- Refresh button ---------- */
   if (!SERVED) refreshBtn.disabled = true;
@@ -169,9 +285,54 @@
   let resizeTimer = null;                          // day names in the breakdown bars depend on their width
   window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => CU.fitBars($("app")), 100); });
 
+  /* ---------- installable app (ACC-1): a service worker, only when served (127.0.0.1 counts as a secure origin) ---------- */
+  if (SERVED && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { /* not essential */ });
+
+  /* ---------- shared settings (API-2): data/config.json through /api/v1/config, so every client and browser sees
+     the same ones. localStorage stays the fallback (page opened as a file, server unreachable). ---------- */
+  let pending = {}, shareTimer = null;
+  function share(changes) {
+    if (!SERVED) return;
+    Object.assign(pending, changes);
+    clearTimeout(shareTimer);
+    shareTimer = setTimeout(() => {                  // a slider sends many values: only the last one, once it rests
+      const body = JSON.stringify(pending); pending = {};
+      fetch("/api/v1/config", { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => { /* kept locally */ });
+    }, 500);
+  }
+  function loadShared() {
+    if (!SERVED) return Promise.resolve();
+    return fetch("/api/v1/config", { cache: "no-store" }).then(r => (r.ok ? r.json() : null)).then(c => {
+      const w = c && c.widget;
+      if (!w) return;
+      levelPref = w.level === "auto" || (w.level >= 1 && w.level <= 9) ? w.level : levelPref;
+      notesOn = w.notes !== false; workOn = !!w.work_hours;
+      if (w.hours >= 1 && w.hours <= 24) hours = w.hours;
+      const urlLang = new URLSearchParams(location.search).get("lang");
+      if (w.lang && !urlLang && w.lang !== CU.lang) CU.setLang(w.lang);   // ?lang= in the address wins
+      if (CU.applyTheme && w.theme) CU.applyTheme(w.theme);
+      showWork();
+    }).catch(() => { /* server unreachable: keep the local settings */ });
+  }
+
+  /* ---------- theme panel (THM-1) ---------- */
+  const openTheme = CU.themePanel ? CU.themePanel($("theme-dlg"), th => share({ theme: th })) : null;
+  $("theme-open").addEventListener("click", () => openTheme && openTheme());
+
   /* ---------- start ---------- */
-  setView(view);
   applyLanguage();
-  loadData().then(render);
-  setInterval(() => loadData().then(render), 10e3);   // new data (the poller can read every 30 s) and countdowns
+  loadShared().then(() => { applyLanguage(); return loadData(); }).then(render);
+  // Periodic tick: new data (the poller can read every 30 s) and countdowns. Countdowns and pace markers depend on
+  // the clock, so a full rebuild still happens every 60 s; in between, an unchanged page only gets its meta line refreshed.
+  function tick() {
+    if (document.visibilityState === "hidden") return;       // nobody is looking: no fetch, no render
+    loadData().then(() => {
+      if (signature() !== lastSig || Date.now() - lastRender >= 60e3) { render(); return; }
+      if (CU.dragging) return;
+      const m = computeNow();
+      if (m) setMeta(m);
+    });
+  }
+  setInterval(tick, 10e3);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadData().then(render); });   // catch up at once
 })(window.CU);

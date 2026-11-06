@@ -101,6 +101,7 @@ window.CU = window.CU || {};
     const fetched = D.fetched_at ? Date.parse(D.fetched_at) : null;
     return {
       five, seven, ratio, hours,
+      workHours: !!opts.workHours && hours < 24,       // pace by working hours (switch on, fewer than 24 h a day)
       ratioEstimated: !!D.ratio_estimate,
       ratioPoints: D.ratio_points,
       samples: D.samples,

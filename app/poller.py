@@ -30,7 +30,8 @@ import claude_usage as cu
 
 LADDER_S = (30, 60, 180, 300, 420, 600)   # delay after a change, then after each reading without change
 RATE_LIMITED_S = 120                       # delay after HTTP 429
-TICK_S = 5                                 # sleep in short slices: survives sleep/hibernate and clock changes
+TICK_S = 5                                 # slice while watching the credentials file
+MAX_SLEEP_S = 60                           # longest slice otherwise: a stop request or clock change is noticed
 
 AUTH_CODES = ("auth", "token_expired")     # fixed by Claude Code renewing the credentials file
 
@@ -49,6 +50,11 @@ def next_delay(step: int, changed: bool, error_code: str | None, retry_after=Non
         return LADDER_S[0], 0, "changed"
     step = min(step + 1, len(LADDER_S) - 1)
     return LADDER_S[step], step, "error" if error_code else "unchanged"
+
+
+def sleep_slice(remaining: float, watching: bool) -> float:
+    """How long to sleep before looking again: short while watching the credentials file, else up to 60 s."""
+    return min(TICK_S if watching else MAX_SLEEP_S, max(0.0, remaining))
 
 
 def signature(state: dict | None) -> tuple | None:
@@ -173,7 +179,7 @@ def loop(data_dir: Path = cu.DATA_DIR) -> int:
                         next_at=cu.iso(cu.datetime.fromtimestamp(due, cu.timezone.utc)),
                         delay_s=delay, step=step, reason=reason, ladder_s=list(LADDER_S))
             while time.time() < due:
-                time.sleep(min(TICK_S, max(0.0, due - time.time())))
+                time.sleep(sleep_slice(due - time.time(), watch is not None))
                 if watch is not None and credentials_stamp() != watch:
                     cu.log(data_dir, "POLLER credentials file renewed: reading now")
                     time.sleep(1)                         # let Claude Code finish writing it

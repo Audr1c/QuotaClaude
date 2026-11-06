@@ -1,0 +1,11 @@
+/* the widget's palette follows the editor's theme; the ring colours stay those of the widget */
+:root, :root[data-theme] {
+  --bg: var(--vscode-sideBar-background); --card: var(--vscode-editor-background); --text: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground); --line: var(--vscode-widget-border, var(--vscode-panel-border));
+  --track: var(--vscode-input-background); --hover: var(--vscode-list-hoverBackground);
+  --sans: var(--vscode-font-family);
+}
+body { padding: 8px; background: var(--bg); }
+.card { border-radius: 10px; padding: 12px; }
+.dash, .col { gap: 10px; }
+.qbtn { display: none; }

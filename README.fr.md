@@ -4,11 +4,11 @@
 
 Enregistre ton quota Claude **sur 5 heures** et **sur 7 jours** (% utilisé + heures de reset) dans un fichier CSV et l'affiche sous forme de jauges, avec des indicateurs de rythme, aux couleurs de Claude. Tout tourne en local sur ta machine.
 
-![Vue détaillée](app/docs/screenshot-detail.png)
+![Cran 9, fenêtre large](app/docs/screenshot-detail.png)
 
-| Compact | Sombre |
+| Fenêtre étroite (cran 4) | Sombre |
 |---|---|
-| ![Vue compacte](app/docs/screenshot-compact.png) | ![Thème sombre](app/docs/screenshot-detail-dark.png) |
+| ![Cran 4, fenêtre étroite](app/docs/screenshot-compact.png) | ![Thème sombre](app/docs/screenshot-detail-dark.png) |
 
 > **Non officiel.** Utilise un endpoint Anthropic non documenté (`/api/oauth/usage`) qui peut changer ou disparaître sans préavis.
 
@@ -37,11 +37,19 @@ Au premier lancement, on choisit la langue (English / Français), puis un menu �
 - **Lancer / Arrêter le serveur du widget** – l'entrée suit l'état réel : « Lancer » quand le serveur est arrêté, « Arrêter » quand il tourne.
 - **Relevés automatiques…** – installer ou retirer le poller de fond, qui fait des relevés tout seul, plus vite quand ton quota bouge et plus lentement sinon (voir [Fonctionnement](#fonctionnement)). Pas d'intervalle à choisir. Option pour lancer aussi le serveur du widget à l'ouverture de session / au démarrage. Ou rien d'automatique : tu rafraîchis à la main (bouton du widget, ou menu).
 - **État** – dernier relevé, état du poller (avec l'heure du prochain relevé), état du serveur.
-- **Lancer les tests**, **Language / Langue**, **Quitter**.
+- **Configuration rapide**, **Lancer les tests**, **Language / Langue**, **Quitter**.
+
+Au premier lancement, une **Configuration rapide** passe avant le menu : langue, vérification que Claude Code est connecté (sinon elle dit de taper `/login` dans Claude Code), premier relevé, relevés automatiques, serveur du widget à l'ouverture de session, raccourci sur le Bureau, ouverture du widget. Chaque étape est une question oui/non avec la réponse conseillée sur **Entrée** ; rien n'est installé sans réponse, et le récapitulatif dit ce qui a été mis en place, où sont les données et comment tout enlever. Elle se relance depuis le menu ou avec `run.py --setup` (`--yes` prend toutes les réponses conseillées sans rien demander). Le menu est regroupé (Voir · Relevés · Réglages · Maintenance), avec une ligne d'état en haut (relevé auto, serveur, dernier relevé).
 
 ### Le widget
 
-Jauges de la fenêtre 5 heures et de la semaine, bascule compact/détaillé, **répartition hebdo** par produit repliée (chaque barre est découpée par jour, voir plus bas), et un **curseur d'heures par jour** sur le côté (1–24 h, grands traits toutes les 5 h) : indique combien d'heures par jour tu utilises vraiment Claude, et le rythme semaine compte ces heures de travail (à partir de ta première requête du jour, 08:00 par défaut) ; le rythme horaire conseillé est calculé dessus. Un encart replié liste toutes les équations (voir plus bas). L'en-tête indique quand aura lieu le prochain relevé automatique (« prochain dans … »).
+Jauges de la fenêtre 5 heures et de la semaine, avec des graduations de temps à l'extérieur des anneaux (tous les quarts d'heure, heures numérotées, pour la fenêtre 5 h ; minuits locaux et initiales des jours pour la semaine) et les graduations de % à l'intérieur. Une **répartition hebdo** par produit (chaque barre est découpée par jour, voir plus bas), et sur le côté un interrupteur **Rythme selon mes heures de travail** (coupé par défaut : le rythme semaine suit le temps du calendrier) ; activé, un **curseur d'heures par jour** apparaît (1–24 h) : le rythme semaine compte alors ces heures de travail (à partir de ta première requête du jour, 08:00 par défaut) et le rythme horaire conseillé est calculé dessus. Le bouton **?** (en haut à droite) ouvre toutes les équations avec tes valeurs dans un panneau latéral. L'en-tête indique quand aura lieu le prochain relevé automatique (« prochain dans … »).
+
+- **Curseur Détail** (en-tête) : neuf crans, de deux fines barres (1) à tout (9), chaque cran gardant ce que montre le précédent : 1 barres, 2 + % et repère de rythme, 3 + heures de reset, 4 les deux anneaux dans un cadran, 5 deux cadrans et chiffres clés, 6 + petit graphique par heure, 7 + graphique du ratio et résumé des tokens, 8 graphiques complets, 9 répartition, tokens par jour et réglages. **Auto** (par défaut) choisit le cran d'après la largeur de la fenêtre. **Explications** est un dixième cran à part : le cran 9 plus une courte note sous chaque panneau ; le **?** de chaque panneau affiche ou masque sa propre note.
+- **Mise en page** : une colonne sur écran étroit, graphiques côte à côte à partir de 900 px, deux colonnes à partir de 1300 px, trois à partir de 1750 px. Au toucher : zones de 44 px, un appui montre la valeur d'une barre ou d'un point, glisser et pincer sur les graphiques.
+- **Thème** (en-tête) : préréglages (Claude, contraste élevé, daltonien, monochrome), tes couleurs pour les deux anneaux et les zones dans / hors budget, clair et sombre séparément, une police système, export / import en texte.
+- **Installable** : Chrome / Edge proposent « Installer l'application » (fenêtre et icône à part) ; il s'ouvre aussi sur `http://claude.localhost:8765/`.
+- Les réglages (cran, explications, heures de travail, langue, thème) sont gardés dans `app/data/config.json` via le serveur : tous les navigateurs et clients voient les mêmes.
 
 Dans la répartition, la barre de chaque produit a un segment par jour local, de la même couleur, avec de fins séparateurs, et le nom du jour écrit dedans (nom complet, puis abréviations plus courtes, puis une lettre, puis rien, selon la place). Survole un segment pour voir sa date et ses points. Chaque produit est mesuré séparément : le segment d'un jour correspond à ce que **ce** produit a consommé ce jour-là (d'après les parts par produit enregistrées dans `breakdown.csv` à chaque changement), donc un jour où tu n'as utilisé que Code n'apparaît que dans la barre Code. L'usage d'avant le début du suivi par produit cette semaine forme un seul segment « Avant » (exact au total, mais pas découpé par jour).
 
@@ -66,8 +74,17 @@ python app/run.py status
 python app/run.py install [--with-server]   lance le poller de fond à l'ouverture de session (et tout de suite)
 python app/run.py uninstall                 le retire (arrête aussi un poller en cours)
 python app/run.py tests
+python app/run.py shortcut [--remove]       raccourci Bureau / menu qui ouvre directement le widget
+python app/run.py hub --url URL --token T   envoie aussi chaque relevé à un hub (voir plus bas) ; --off pour arrêter
+python app/run.py --setup [--yes]           relance la configuration rapide (--yes : réponses conseillées, sans question)
 python app/run.py --lang fr <command>       force la langue
 ```
+
+### API de lecture, VS Code, autres appareils
+
+- **API** (mêmes données pour tous les clients, jamais le jeton Claude) : `GET /api/v1/latest`, `/api/v1/history?since=ISO`, `/api/v1/tokens?since=AAAA-MM-JJ`, `/api/v1/model[?hours=N]` (valeurs des cadrans, limites et rythmes calculés par le serveur, prêts à dessiner), `GET`/`POST /api/v1/config` (réglages partagés, validés). `latest.json` porte `"schema": 1` ; `app/schema/latest.v1.json` est l'exemple de référence.
+- **VS Code** : `app/vscode/` est une extension avec un indicateur dans la barre d'état (`▰▰▱ 42 % · ▰▱▱ 18 %`, infobulle, couleurs selon les seuils) et une vue latérale dessinée avec les composants du widget, au cran qui va avec sa largeur. Voir [app/vscode/README.md](app/vscode/README.md).
+- **Hub** (machine toujours allumée : NAS, petit serveur) : y lancer `server.py --bind 0.0.0.0 --token-file data/api_token` (ou le `app/Dockerfile`) ; sur le PC, `run.py hub --url http://hub:8765 --token <le jeton du hub>`. Le PC continue de faire les relevés et pousse chacun : le jeton Claude ne le quitte jamais. Sur le hub, chaque requête demande le jeton d'API (`Authorization: Bearer`, ou ouvrir `/?token=…` une fois dans le navigateur). Y accéder par Tailscale / WireGuard (`tailscale serve` fournit le HTTPS, nécessaire pour installer l'application sur un téléphone) plutôt que depuis Internet ; les noms d'hôte en plus vont dans `allowed_hosts` de `config.json` ou `--allow-host`.
 
 ## Lanceurs et icône
 
@@ -113,10 +130,11 @@ Tout reste dans le dossier `app/data/` à côté du code (ignoré par git, cré�
 | `last_response.json` | réponse brute de l'API au dernier relevé (débogage) |
 | `tracker.log` | journal des relevés en arrière-plan (statut, Retry-After, échecs d'affilée) |
 | `errors.json` | les 30 derniers relevés en échec, avec tous les détails ; le bandeau rouge du widget les ouvre (**Détails**) |
-| `config.json` | ta langue du menu |
+| `config.json` | langue du menu, configuration faite, réglages du widget (cran, explications, heures de travail, thème), adresse du hub |
+| `hub_token` / `api_token` | seulement avec un hub : le jeton d'API du tracker (droits 0600 ; ce n'est pas le jeton Claude) |
 | `server.log` | sortie du serveur du widget (Linux) |
 
-Hors de `app/data/` : la tâche planifiée si tu en installes une (Planificateur de tâches Windows, ou service systemd utilisateur / ligne crontab sous Linux ; le menu la retire), et les dossiers `__pycache__` de Python. Le fichier d'identifiants de Claude Code est seulement **lu**, jamais copié. Un relevé demande Claude Code connecté ; sinon le menu t'indique que les identifiants sont introuvables.
+Hors de `app/data/` : le raccourci « Claude Usage » si tu l'as créé (`run.py shortcut --remove`), la tâche planifiée si tu en installes une (Planificateur de tâches Windows, ou service systemd utilisateur / ligne crontab sous Linux ; le menu la retire), et les dossiers `__pycache__` de Python. Le fichier d'identifiants de Claude Code est seulement **lu**, jamais copié. Un relevé demande Claude Code connecté ; sinon le menu t'indique que les identifiants sont introuvables.
 
 ## Fonctionnement
 
@@ -131,7 +149,7 @@ Le ratio semaine / 5 heures affiché dans le widget est estimé à partir de tes
 
 ## Comment les chiffres sont calculés
 
-Le widget contient un encart replié **Comment c'est calculé** qui montre chaque équation avec tes valeurs actuelles. Même contenu ici. Notation : *u5* / *u7* = % utilisé dans la fenêtre 5 heures / la semaine (donnés par Claude), *h* = le curseur d'heures par jour.
+Le bouton **?** du widget ouvre le panneau **Comment c'est calculé** qui montre chaque équation avec tes valeurs actuelles. Même contenu ici. Notation : *u5* / *u7* = % utilisé dans la fenêtre 5 heures / la semaine (donnés par Claude), *h* = le curseur d'heures par jour.
 
 | Quoi | Équation |
 |---|---|
@@ -165,7 +183,11 @@ app/                        tout le reste
   claude_usage.py           lit le quota, écrit data/
   poller.py                 poller adaptatif (relevés en arrière-plan)
   transcripts.py            compteurs de tokens locaux d'après les transcripts de Claude Code
-  server.py                 serveur local du widget
+  server.py                 serveur local du widget et API de lecture (/api/v1)
+  model.py  settings.py     le modèle de rythme calculé côté serveur, réglages partagés
+  hub.py  Dockerfile        hub : relevés poussés par un PC, jeton d'API
+  schema/                   exemple de latest.json (contrat de données)
+  vscode/                   extension VS Code
   web/                      le widget (HTML, CSS, JS ; EN/FR)
   windows/  linux/          scripts d'installation/désinstallation du planificateur
   tools/  assets/  Makefile source C des lanceurs, scripts de build, icônes
@@ -177,7 +199,7 @@ app/                        tout le reste
 
 - Aucune donnée ne quitte ta machine, hormis la requête vers l'API d'Anthropic avec ton propre jeton.
 - Le jeton est lu à l'exécution, jamais copié ni journalisé. `app/data/` et les identifiants sont dans `.gitignore`.
-- Le serveur n'écoute que sur `127.0.0.1`.
+- Le serveur n'écoute que sur `127.0.0.1`, sauf si tu lances un hub avec `--bind`, qui exige alors un jeton d'API à chaque requête.
 - Les transcripts de Claude Code contiennent tes conversations. `transcripts.py` n'y lit que des nombres de tokens, le modèle, l'heure, l'identifiant du message et l'indicateur de sous-agent, et n'écrit que des compteurs et des identifiants de messages (des chaînes aléatoires de l'API) ; jamais le texte, ni aucun nom de projet ou de dossier (les fichiers de transcripts sont identifiés par un hachage). Chaque message n'est compté qu'une fois, même quand une session reprise ou un fichier de sous-agent le répète.
 
 ## Remarques

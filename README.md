@@ -4,11 +4,11 @@
 
 Logs your Claude **5-hour** and **7-day** quota (% used + reset times) to a CSV file and shows it as gauges, with pacing indicators, in Claude's colours. Everything runs locally on your machine.
 
-![Detailed view](app/docs/screenshot-detail.png)
+![Level 9, wide window](app/docs/screenshot-detail.png)
 
-| Compact | Dark |
+| Narrow window (level 4) | Dark |
 |---|---|
-| ![Compact view](app/docs/screenshot-compact.png) | ![Dark theme](app/docs/screenshot-detail-dark.png) |
+| ![Level 4, narrow window](app/docs/screenshot-compact.png) | ![Dark theme](app/docs/screenshot-detail-dark.png) |
 
 > **Unofficial.** It uses an undocumented Anthropic endpoint (`/api/oauth/usage`) that may change or disappear without notice.
 
@@ -30,18 +30,26 @@ You do not need to build anything: the launchers are already in the repository.
 
 Your readings are stored in the `app/data/` folder next to the code (see [Where your data goes](#where-your-data-goes)).
 
-The first launch asks for a language (English / Français), then shows an arrow-key menu with a short explanation under each entry:
+The first launch runs a **Quick setup**: language, a check that Claude Code is signed in (it tells you to type `/login` in Claude Code if not), a first reading, automatic readings, the widget server at login, a desktop shortcut, opening the widget. Each step is a yes/no question with the recommended answer on **Enter**; nothing is installed without an answer, and the final summary says what was set up, where your data is and how to remove everything. It can be replayed from the menu or with `run.py --setup` (`--yes` takes every recommended answer without asking).
+
+Then comes an arrow-key menu, grouped (See · Readings · Settings · Maintenance), with a state line on top (automatic readings, server, latest reading) and a short explanation under each entry:
 
 - **Take a reading now** – one manual reading, saved to the CSV.
 - **Open the widget** – starts the local server and opens the gauges in your browser.
 - **Start / Stop the widget server** – the entry follows the real state: it offers "Start" when the server is off and "Stop" when it is running.
 - **Automatic readings** – install or remove the background poller, which takes readings by itself, faster while your quota is moving and slower when it is not (see [How it works](#how-it-works)). No interval to choose. Optionally also start the widget server at login/boot. Or skip it entirely and refresh by hand (button in the widget, or the menu).
 - **Status** – last reading, poller state (with the time of the next reading), server state.
-- **Run tests**, **Language**, **Quit**.
+- **Quick setup**, **Run tests**, **Language**, **Quit**.
 
 ### The widget
 
-Gauges for the 5-hour window and the week, a compact/detailed switch, a collapsed per-product **Weekly breakdown** (each bar is split by day, see below), and an **hours-per-day slider** on the side (1–24 h, long marks every 5 h): tell it how many hours a day you really use Claude and the weekly pace counts those working hours (from your first request of the day, 08:00 by default) and the advised hourly pace is computed over them. A collapsed panel lists every equation (see below). The header shows when the next automatic reading is due ("next in …").
+Gauges for the 5-hour window and the week, with time marks outside the rings (every 15 minutes, hours labelled, for the 5-hour window; local midnights and day initials for the week) and % marks inside. A per-product **Weekly breakdown** (each bar is split by day, see below), and on the side a **Pace by my working hours** switch (off by default: the weekly pace follows calendar time); switched on, an **hours-per-day slider** appears (1–24 h): the weekly pace then counts those working hours (from your first request of the day, 08:00 by default) and the advised hourly pace is computed over them. The **?** button (top right) opens every equation with your values in a side panel. The header shows when the next automatic reading is due ("next in …").
+
+- **Detail slider** (header): nine levels, from two thin bars (1) to everything (9), each level keeping what the level below shows: 1 bars, 2 + % and pace marker, 3 + reset times, 4 the two rings in one gauge, 5 two gauges with key figures, 6 + a small hourly chart, 7 + the ratio chart and the tokens summary, 8 full charts, 9 breakdown, per-day tokens and settings. **Auto** (default) picks the level from the width of the window. **Explanations** is a tenth notch apart from the slider: level 9 plus a short note under each panel; each panel's **?** shows or hides its own note.
+- **Layout**: one column on a narrow screen, the charts side by side from 900 px, two columns from 1300 px, three from 1750 px. On a touch screen: 44 px targets, a tap shows the value of a bar or a dot, drag and pinch on the charts.
+- **Theme** (header): presets (Claude, high contrast, colour-blind, monochrome), your own colours for the two rings and the inside / over-budget zones, light and dark separately, a system font, export / import as text.
+- **Installable**: Chrome / Edge offer "Install app" (own window and icon); it also opens at `http://claude.localhost:8765/`.
+- Settings (level, explanations, working hours, language, theme) are stored in `app/data/config.json` through the server, so every browser and client sees the same ones.
 
 In the breakdown, each product's bar has one segment per local day, all in the same colour with thin separators, and the day name written inside (full name, then shorter abbreviations, then one letter, then nothing, depending on the room). Hover a segment for its date and points. Each product is measured on its own: a day's segment is how much **that** product rose that day (from the per-product shares recorded in `breakdown.csv` at each change), so a Code-only day only shows up in the Code bar. Usage from before the per-product tracking started this week forms a single "Earlier" segment (exact in total, not split by day).
 
@@ -66,8 +74,17 @@ python app/run.py status
 python app/run.py install [--with-server]   start the background poller at logon (and now)
 python app/run.py uninstall                 remove it (also stops a running poller)
 python app/run.py tests
+python app/run.py shortcut [--remove]       desktop / menu shortcut that opens the widget directly
+python app/run.py hub --url URL --token T   also send every reading to a hub (see below); --off to stop
+python app/run.py --setup [--yes]           quick setup again (--yes: recommended answers, no questions)
 python app/run.py --lang fr <command>       force the language
 ```
+
+### Read API, VS Code, other devices
+
+- **API** (same data for every client, never the Claude token): `GET /api/v1/latest`, `/api/v1/history?since=ISO`, `/api/v1/tokens?since=YYYY-MM-DD`, `/api/v1/model[?hours=N]` (gauge values, limits and paces computed by the server, ready to draw), `GET`/`POST /api/v1/config` (shared settings, validated). `latest.json` carries `"schema": 1`; `app/schema/latest.v1.json` is the reference sample.
+- **VS Code**: `app/vscode/` is an extension with a status bar indicator (`▰▰▱ 42 % · ▰▱▱ 18 %`, tooltip, colours by threshold) and a side view drawn with the widget's own components at the level that fits its width. See [app/vscode/README.md](app/vscode/README.md).
+- **Hub** (an always-on machine: NAS, small server): run `server.py --bind 0.0.0.0 --token-file data/api_token` there (or the `app/Dockerfile`); on the PC, `run.py hub --url http://hub:8765 --token <the hub's token>`. The PC keeps doing the readings and pushes each one: the Claude token never leaves it. On the hub every request needs the API token (`Authorization: Bearer`, or open `/?token=…` once in a browser). Reach it through Tailscale / WireGuard (`tailscale serve` gives HTTPS, needed to install the app on a phone) rather than from the Internet; extra host names go in `allowed_hosts` of `config.json` or `--allow-host`.
 
 ## Launchers and icon
 
@@ -113,10 +130,11 @@ Everything stays in the `app/data/` folder next to the code (git-ignored, create
 | `last_response.json` | raw API answer of the last reading (debugging) |
 | `tracker.log` | log of the background readings (status, Retry-After, failures in a row) |
 | `errors.json` | the last 30 failed readings with full detail; the widget's red banner opens it (**Details**) |
-| `config.json` | your menu language |
+| `config.json` | menu language, setup done, widget settings (level, explanations, working hours, theme), hub address |
+| `hub_token` / `api_token` | only with a hub: the API token of the tracker (rights 0600; not the Claude token) |
 | `server.log` | widget server output (Linux) |
 
-Outside `app/data/`: the scheduled task if you set one up (Windows Task Scheduler, or a systemd user service / crontab line on Linux; the menu removes it), and Python's `__pycache__` folders. The Claude Code credentials file is only **read**, never copied. A reading needs Claude Code signed in; otherwise the menu tells you the credentials were not found.
+Outside `app/data/`: the "Claude Usage" shortcut if you created one (`run.py shortcut --remove`), the scheduled task if you set one up (Windows Task Scheduler, or a systemd user service / crontab line on Linux; the menu removes it), and Python's `__pycache__` folders. The Claude Code credentials file is only **read**, never copied. A reading needs Claude Code signed in; otherwise the menu tells you the credentials were not found.
 
 ## How it works
 
@@ -131,7 +149,7 @@ The weekly-vs-5-hour ratio shown in the widget is estimated from your own consec
 
 ## How the numbers are computed
 
-The widget has a collapsed **How it is computed** panel that shows each equation with your current values. Same content here. Notation: *u5* / *u7* = % used in the 5-hour window / the week (as reported), *h* = the hours-per-day slider.
+The widget's **?** button opens the **How it is computed** panel, which shows each equation with your current values. Same content here. Notation: *u5* / *u7* = % used in the 5-hour window / the week (as reported), *h* = the hours-per-day slider.
 
 | What | Equation |
 |---|---|
@@ -165,7 +183,11 @@ app/                        everything else
   claude_usage.py           reads the quota, writes data/
   poller.py                 adaptive poller (background readings)
   transcripts.py            local token counters from Claude Code's transcripts
-  server.py                 local widget server
+  server.py                 local widget server and read API (/api/v1)
+  model.py  settings.py     the pace model computed on the server, shared settings
+  hub.py  Dockerfile        hub: readings pushed by a PC, API token
+  schema/                   sample of latest.json (data contract)
+  vscode/                   VS Code extension
   web/                      the widget (HTML, CSS, JS; EN/FR)
   windows/  linux/          scheduler install/uninstall scripts
   tools/  assets/  Makefile launchers' C source, build scripts, icons
@@ -177,7 +199,7 @@ app/                        everything else
 
 - No data leaves your machine except the request to Anthropic's API with your own token.
 - The token is read at run time and never copied or logged. `app/data/` and credentials are in `.gitignore`.
-- The server only listens on `127.0.0.1`.
+- The server only listens on `127.0.0.1`, unless you start a hub with `--bind`, which requires an API token for every request.
 - Claude Code's transcripts contain your conversations. `transcripts.py` reads only token numbers, the model, the time, the message id and the sub-agent flag from them, and writes only counters and message ids (random strings from the API); never the text, and no project or folder name (transcript files are identified by a hash). Each message is counted once, even when a resumed session or a sub-agent file repeats it.
 
 ## Notes

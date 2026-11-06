@@ -25,7 +25,7 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.five")}</h2>${pill(CU.status(five.used, five.pace))}</div>
         ${CU.gauge({
           label: t("card.five"),
-          rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.limit,
+          rings: [{ r: 118, width: 20, used: five.used, color: BLUE, limit: five.limit, time: CU.gaugeTime("five", five.reset && five.reset.getTime()),
                     markers: [{ v: five.pace, color: BLUE_INK }, { v: five.weekPace, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(five.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
@@ -45,14 +45,14 @@ window.CU = window.CU || {};
         <div class="card-head"><h2>${t("card.seven")}</h2>${pill(CU.status(seven.used, seven.pace))}</div>
         ${CU.gauge({
           label: t("card.seven"),
-          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, limit: seven.limit, markers: [{ v: seven.pace, color: CLAY_INK }] }],
+          rings: [{ r: 118, width: 20, used: seven.used, color: CLAY, limit: seven.limit, time: CU.gaugeTime("seven", seven.reset && seven.reset.getTime()), markers: [{ v: seven.pace, color: CLAY_INK }] }],
           center: [{ dy: 10, text: big(seven.used), size: 56, serif: true },
                    { dy: 36, text: t("gauge.used"), size: 13, fill: "var(--muted)" }],
           footer: resetText(seven),
         })}
         <ul class="legend">
           ${li("dot", CLAY, t("legend.used"), pct(seven.used))}
-          ${li("tri", CLAY_INK, t("legend.pace7"), pct(seven.pace))}
+          ${li("tri", CLAY_INK, t(m.workHours ? "legend.pace7.work" : "legend.pace7"), pct(seven.pace))}
           ${li("sp", "", t("legend.perday"), pct(seven.ratePerDay, 1) + " " + t("unit.perday"))}
           ${li("sp", "", t("legend.sessions"), "≈ " + num(seven.sessionsLeft))}
           ${li("sp", "", t("legend.today"), pct(seven.todayLeft, 1))}
@@ -60,7 +60,7 @@ window.CU = window.CU || {};
         </ul>
       </section>`;
 
-    return `<div class="grid">${card5}${card7}</div>`;
+    return `<div class="grid">${card5}${card7}</div><p class="note gauges-note" data-note="gauges">${t("gauges.note")}${m.workHours ? " " + t("gauges.work") : ""}</p>`;
   }
 
   /* ---------------- compact view: one block, two concentric rings ---------------- */
@@ -69,8 +69,9 @@ window.CU = window.CU || {};
     const svg = CU.gauge({
       label: t("gauge.aria.compact"),
       rings: [
-        { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.limit, markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
+        { r: 126, width: 16, used: seven.used, color: CLAY, limit: seven.limit, time: CU.gaugeTime("seven", seven.reset && seven.reset.getTime()), markers: [{ v: seven.pace, color: CLAY_INK, side: "out" }] },
         { r: 92, width: 16, used: five.used, color: BLUE, limit: five.limit,
+          time: Object.assign({ side: "in" }, CU.gaugeTime("five", five.reset && five.reset.getTime(), false)),
           markers: [{ v: five.pace, color: BLUE_INK, side: "in" }, { v: five.weekPace, color: CLAY_INK, side: "out" }] },
       ],
       center: [
@@ -95,6 +96,7 @@ window.CU = window.CU || {};
           ${li("tri", CLAY_INK, t("compact.legend.limit5"), pct(five.weekPace))}
           ${li("tri", CLAY_INK, t("compact.legend.pace7"), pct(seven.pace))}
         </ul>
+        <p class="note gauges-note" data-note="gauges">${t("gauges.note")}${m.workHours ? " " + t("gauges.work") : ""}</p>
         <div class="stats">
           <div><b>${pct(five.paceRate, 1)}</b><span>${t("stat.rate")}</span></div>
           <div><b>${pct(seven.ratePerDay, 1)}</b><span>${t("stat.day")}</span></div>
@@ -102,6 +104,25 @@ window.CU = window.CU || {};
         </div>
       </section>`;
   }
+
+  /* ---------------- strip (levels 1 to 3): two thin bars in the ring colours ----------------
+     1: the bars only (filled to the % used); 2: + the % written and the pace marker; 3: + when each window resets. */
+  CU.strip = function (m, lvl) {
+    const { five, seven } = m;
+    const row = (w, label, color, ink) => {
+      const pace = lvl >= 2 && w.pace != null ? `<i class="pace" style="left:${Math.min(100, w.pace).toFixed(1)}%;color:${ink}"></i>` : "";
+      const tip = `${label} · ${pct(w.used)}${w.pace != null ? " · " + t("strip.pace", { n: pct(w.pace) }) : ""}`;
+      return `<div class="srow" title="${tip}">
+          ${lvl >= 2 ? `<span class="slabel">${label}</span>` : ""}
+          <span class="sbar"><span class="sfill" style="width:${Math.min(100, w.used).toFixed(1)}%;background:${color}"></span>${pace}</span>
+          ${lvl >= 2 ? `<b style="color:${ink}">${pct(w.used)}</b>` : ""}
+          ${lvl >= 3 ? `<span class="sreset">${resetText(w)}</span>` : ""}
+        </div>`;
+    };
+    return `<section class="card strip lvl${lvl}" role="group" aria-label="${t("gauge.aria.compact")}">
+        ${row(five, t("compact.five"), BLUE, BLUE_INK)}${row(seven, t("compact.seven"), CLAY, CLAY_INK)}
+      </section>`;
+  };
 
   /* ---------------- per-product breakdown (collapsed by default) ---------------- */
   /* One segment per day inside each bar. data-labels = the day name from longest to shortest; CU.fitBars keeps
@@ -140,7 +161,7 @@ window.CU = window.CU || {};
     const count = rows.length === 1 ? t("breakdown.count.one") : t("breakdown.count", { n: rows.length });
     return `
       <details class="card breakdown"${open ? " open" : ""}>
-        <summary><h2>${t("breakdown.title")}</h2><span class="hint">${count}</span></summary>
+        <summary><h2>${t("breakdown.title")}</h2><span class="hint">${count}</span><button type="button" class="qbtn" data-note-for="breakdown" aria-label="${t("notes.one")}" title="${t("notes.one")}">?</button></summary>
         <ul class="bars">
           ${rows.map(r => `
             <li>
@@ -150,46 +171,62 @@ window.CU = window.CU || {};
               <span class="q">${t("breakdown.quota", { n: num(r.quota) })}</span>
             </li>`).join("")}
         </ul>
-        <p class="note">${t("breakdown.note", { pct: pct(m.seven.used) })} ${t("breakdown.days")}</p>
+        <p class="note" data-note="breakdown">${t("breakdown.note", { pct: pct(m.seven.used) })} ${t("breakdown.days")}</p>
       </details>`;
   };
 
   /* ---------------- "how it is computed" panel: every equation, with your current numbers ---------------- */
   const hhmm = ms => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  CU.formulas = function (m, open) {
+  CU.formulas = function (m) {
     const { five, seven } = m, H = 3600e3, dash = "—";
     const hl5 = five.left / H, dl7 = seven.left / (24 * H);
     const p1 = v => v == null ? dash : pct(v, 1), n2 = v => v == null ? dash : num(v, 2);
+    const w = m.workHours ? "slider" : "";             // rows that depend on the working-hours slider (only when it is on)
     const rows = [
       ["used", "", "", `${p1(five.used)} / ${p1(seven.used)}`],
       ["pace5", "", `(5 h − ${n2(hl5)} h) / 5 h`, p1(five.pace)],
-      ["start", "", "", seven.work && seven.work.startToday ? hhmm(seven.work.startToday.ms) + " " + (seven.work.startToday.auto ? t("f.start.auto") : t("f.start.def")) : dash],
-      ["pace7", "slider", seven.work ? `${n2(seven.work.elapsedH)} h / ${n2(seven.work.totalH)} h` : "", p1(seven.pace)],
-      ["ratio", "", m.ratioEstimated ? t("f.ratio.est") : t("f.ratio.def"), p1(m.ratio)],
+      w && ["start", "", "", seven.work && seven.work.startToday ? hhmm(seven.work.startToday.ms) + " " + (seven.work.startToday.auto ? t("f.start.auto") : t("f.start.def")) : dash],
+      [w ? "pace7" : "pace7.cal", w, seven.work ? `${n2(seven.work.elapsedH)} h / ${n2(seven.work.totalH)} h` : "", p1(seven.pace)],
+      ["ratio", "", m.ratioEstimated ? t("f.ratio.est", { pts: num(m.ratioPoints, 0) }) : t("f.ratio.def"), p1(m.ratio)],
       ["u0", "", "", p1(seven.startUsed)],
       ["days", "", "", n2(seven.daysLeft) + " d"],
       ["budget", "", `(100 − ${p1(seven.startUsed)}) / ${n2(seven.daysLeft)}`, p1(seven.dailyBudget)],
       ["l7", "", `${p1(seven.startUsed)} + ${p1(seven.dailyBudget)}`, p1(seven.limit)],
       ["left", "", `max(0, ${p1(seven.limit)} − ${p1(seven.used)})`, p1(seven.todayLeft)],
       ["l5", "", `${p1(five.used)} + ${p1(seven.todayLeft)} × 100 / ${p1(m.ratio)}`, p1(five.limit)],
-      ["rate", "slider", `${p1(seven.dailyBudget)} / ${m.hours} h × 100 / ${p1(m.ratio)}`, p1(five.paceRate) + t("unit.perhour")],
+      ["rate", w, `${p1(seven.dailyBudget)} / ${m.hours} h × 100 / ${p1(m.ratio)}`, p1(five.paceRate) + t("unit.perhour")],
       ["max", "", `(100 − ${p1(five.used)}) / ${n2(hl5)} h`, p1(five.maxRate) + t("unit.perhour")],
       ["win", "", `(100 − ${p1(seven.used)}) / ${p1(m.ratio)}`, "≈ " + num(seven.sessionsLeft)],
       ["share", "", "", ""],
-    ];
+    ].filter(Boolean);
     return `
-      <details class="card formulas" data-key="formulas"${open ? " open" : ""}>
-        <summary><h2>${t("formulas.title")}</h2><span class="hint">${t("formulas.hint")}</span></summary>
-        <p class="note">${t("formulas.slider")}</p>
+        <p class="lead">${t(w ? "formulas.slider" : "formulas.slider.off")}</p>
         <table class="eqs">
           ${rows.map(([id, flag, calc, val]) => `
             <tr${flag ? ' class="flag"' : ""}>
               <th>${t("f." + id + ".name")}${flag ? ` <span class="badge">${t("formulas.badge")}</span>` : ""}</th>
               <td><code>${t("f." + id + ".eq")}</code>${calc || val ? `<br><span class="calc">${calc}${val ? (calc ? " = " : "") + "<b>" + val + "</b>" : ""}</span>` : ""}</td>
             </tr>`).join("")}
-        </table>
-      </details>`;
+        </table>`;
   };
 
   CU.views = { detail, compact };
+
+  /* ---------------- the whole page for a compactness level (UI-5); also used by the VS Code view ----------------
+     Each level keeps everything of the level below and adds to it: 1-3 strip, 4 the two rings in one gauge, 5 two
+     gauges + key figures, 6 + hourly chart, 7 + ratio chart and the tokens summary, 8 full charts, 9 everything
+     (breakdown, per-day tokens, settings), 10 = 9 + the explanations. Three columns on a wide screen (style.css). */
+  CU.compose = function (m, L, opts = {}) {
+    const chartsOpen = opts.chartsOpen || {};
+    const open = html => html.replace(/<details class="card chart" data-key="(\w+)"[^>]*/g, (a, k) => a + (chartsOpen[k] === false ? "" : " open"));
+    const gauges = L <= 3 ? CU.strip(m, L) : L === 4 ? compact(m) : detail(m);
+    const charts = L >= 7 ? ["hourly", "ratio"] : L >= 6 ? ["hourly"] : [];
+    const lv = Math.min(L, 9), hasCharts = !!CU.charts;
+    return `<div class="dash"><div class="col col-gauges">${gauges}${L >= 9 ? CU.breakdown(m, opts.breakdownOpen) : ""}</div>`
+      + `<div class="col col-charts">${hasCharts && charts.length ? open(CU.charts(m, charts, lv)) : ""}</div>`
+      + `<div class="col col-tokens">${hasCharts && L >= 7 ? open(CU.charts(m, ["tokens"], lv)) : ""}</div></div>`;
+  };
+  /* automatic level: the widest one whose minimum width (px of content) is reached */
+  CU.LEVEL_WIDTHS = [[0, 1], [200, 2], [260, 3], [330, 4], [400, 5], [520, 6], [640, 7], [760, 8], [880, 9]];
+  CU.levelFor = w => CU.LEVEL_WIDTHS.reduce((lv, [min, l]) => (w >= min ? l : lv), 1);
 })(window.CU);
