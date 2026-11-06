@@ -4,11 +4,11 @@
 
 Logs your Claude **5-hour** and **7-day** quota (% used + reset times) to a CSV file and shows it as gauges, with pacing indicators, in Claude's colours. Everything runs locally on your machine.
 
-![Detailed view](app/docs/screenshot-detail.png)
+![Level 9, wide window](app/docs/screenshot-detail.png)
 
-| Compact | Dark |
+| Narrow window (level 4) | Dark |
 |---|---|
-| ![Compact view](app/docs/screenshot-compact.png) | ![Dark theme](app/docs/screenshot-detail-dark.png) |
+| ![Level 4, narrow window](app/docs/screenshot-compact.png) | ![Dark theme](app/docs/screenshot-detail-dark.png) |
 
 > **Unofficial.** It uses an undocumented Anthropic endpoint (`/api/oauth/usage`) that may change or disappear without notice.
 

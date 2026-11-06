@@ -4,11 +4,11 @@
 
 Enregistre ton quota Claude **sur 5 heures** et **sur 7 jours** (% utilisé + heures de reset) dans un fichier CSV et l'affiche sous forme de jauges, avec des indicateurs de rythme, aux couleurs de Claude. Tout tourne en local sur ta machine.
 
-![Vue détaillée](app/docs/screenshot-detail.png)
+![Cran 9, fenêtre large](app/docs/screenshot-detail.png)
 
-| Compact | Sombre |
+| Fenêtre étroite (cran 4) | Sombre |
 |---|---|
-| ![Vue compacte](app/docs/screenshot-compact.png) | ![Thème sombre](app/docs/screenshot-detail-dark.png) |
+| ![Cran 4, fenêtre étroite](app/docs/screenshot-compact.png) | ![Thème sombre](app/docs/screenshot-detail-dark.png) |
 
 > **Non officiel.** Utilise un endpoint Anthropic non documenté (`/api/oauth/usage`) qui peut changer ou disparaître sans préavis.
 
