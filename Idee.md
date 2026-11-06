@@ -365,4 +365,4 @@ Déjà disponibles dans `latest.json` mais masqués dans le panneau depuis la re
 | `DAT-2` | Jours UTC (tokens, ratio) contre jours locaux (répartition par produit, usage par heure) : harmoniser ou le dire dans les libellés | M |
 | `DAT-3` | ✅ Année absente des libellés de plage au-delà d'un an | S |
 | `TST-1` | Tests JavaScript plus larges (rendu des graphiques, glisser-déposer, passage à l'heure d'été) et test dans un vrai navigateur | M |
-| `TST-2` | Vérifier la compatibilité Python 3.8 à 3.10 (annoncée « 3.8+ » mais non testée) | S |
+| `TST-2` | ✅ Vérifier la compatibilité Python 3.8 à 3.10 (annoncée « 3.8+ » mais non testée) (3.8, 3.10 et 3.13 vérifiés) | S |

@@ -9,6 +9,7 @@ Times are in milliseconds since the epoch, like in JavaScript; "local" means the
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timedelta
 
 H = 3600e3
@@ -24,8 +25,10 @@ def clamp(v, a=0.0, b=100.0):
 def ms(iso_text) -> float | None:
     if not iso_text:
         return None
+    # Python < 3.11 only accepts 3 or 6 fraction digits: pad or cut to 6 (keeps the milliseconds, like Date.parse)
+    s = re.sub(r"\.(\d+)(?=[+-]\d\d:\d\d$|$)", lambda m: "." + (m.group(1) + "000000")[:6], str(iso_text).replace("Z", "+00:00"))
     try:
-        return datetime.fromisoformat(str(iso_text).replace("Z", "+00:00")).timestamp() * 1000
+        return datetime.fromisoformat(s).timestamp() * 1000
     except ValueError:
         return None
 

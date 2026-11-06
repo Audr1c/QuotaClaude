@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """API-1 / API-2: the data contract (schema/latest.v1.json), the /api/v1 routes, the shared settings, and the
 server-side model (model.py) giving the same numbers as the widget's web/js/model.js."""
+from __future__ import annotations
+
 import http.client
 import json
 import os
