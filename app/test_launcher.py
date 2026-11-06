@@ -2,6 +2,8 @@
 """
 Tests of the launcher, of the French/English texts and of the "code is English" rule.   python test_launcher.py
 """
+import io
+import json
 import os
 import re
 import shutil
@@ -31,10 +33,12 @@ class LauncherTextTests(unittest.TestCase):
     def test_every_key_used_by_the_code_exists(self):
         source = (ROOT / "launcher" / "app.py").read_text(encoding="utf-8")
         used = set(re.findall(r"""\bt\(\s*["']([\w.]+)["']""", source)) | set(re.findall(r"""say\(\s*["']([\w.]+)["']""", source))
-        entries = ("read", "open", "server.start", "server.stop", "auto", "status", "lang", "tests", "quit")
+        used = {k for k in used if not k.endswith(".")}     # prefixes of dynamic keys, checked explicitly below
+        entries = ("read", "open", "server.start", "server.stop", "auto", "status", "setup", "lang", "tests", "quit")
         used |= {f"main.{k}" for k in entries}
         used |= {f"main.{k}.desc" for k in entries}
-        used |= {f"kind.{k}" for k in ("task", "systemd", "cron")}
+        used |= {f"kind.{k}" for k in ("task", "systemd", "cron", "manual")}
+        used |= {f"group.{g}" for g, _ in app.MENU}
         used |= {f"error.{k}" for k in ("no_credentials", "bad_credentials", "auth", "token_expired", "file_locked", "http", "network", "bad_json", "unexpected_response")}
         self.assertEqual(sorted(k for k in used if k not in strings.EN), [])
 
@@ -90,6 +94,52 @@ class CodeIsEnglishTests(unittest.TestCase):
                 if self.ACCENTS.search(path.read_text(encoding="utf-8", errors="replace")):
                     offenders.append(str(rel))
         self.assertEqual(offenders, [])
+
+
+class WizardTests(unittest.TestCase):
+    """The quick setup with --yes takes every recommended answer, and never installs twice."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        self.calls = []
+        self.patches = [mock.patch.object(app, "DATA", d), mock.patch.object(app, "CONFIG_FILE", d / "config.json"),
+                        mock.patch.object(app, "IS_LINUX", True), mock.patch.object(app, "IS_WINDOWS", False),
+                        mock.patch.object(app, "token_problem", lambda: None),
+                        mock.patch.object(app, "read_now", lambda ui: self.calls.append("read") or True),
+                        mock.patch.object(app, "open_widget", lambda ui, browser=True: self.calls.append("open") or True),
+                        mock.patch.object(app, "install_task", lambda ui, s: self.calls.append(("install", s)) or True)]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.tmp.cleanup()
+
+    def run_quiet(self, kind):
+        with mock.patch.object(app, "scheduler_kind", lambda: kind), mock.patch("sys.stdout", io.StringIO()) as out:
+            app.setup_wizard(app.Ui("en"), yes=True)
+        return out.getvalue()
+
+    def test_yes_takes_the_recommended_answers(self):
+        out = self.run_quiet(None)
+        self.assertEqual(self.calls, ["read", ("install", True)])      # --yes does not open a browser
+        self.assertTrue(app.load_config().get("setup_done"))
+        self.assertIn("run.py uninstall", out)
+
+    def test_replay_does_not_install_again(self):
+        app.save_config({"server_at_login": True})
+        out = self.run_quiet("systemd")
+        self.assertEqual(self.calls, ["read"])
+        self.assertIn("already set up", out)
+
+    def test_missing_token_skips_the_reading(self):
+        err = app.cu.TrackerError("no_credentials", "nope")
+        with mock.patch.object(app, "token_problem", lambda: err):
+            out = self.run_quiet(None)
+        self.assertNotIn("read", self.calls)
+        self.assertIn("/login", out)
 
 
 class LauncherLogicTests(unittest.TestCase):
@@ -160,17 +210,23 @@ class MenuSmokeTest(unittest.TestCase):
         os.close(fd)
         return seen, os.waitstatus_to_exitcode(status) if hasattr(os, "waitstatus_to_exitcode") else status
 
-    def test_first_run_language_then_status_then_quit(self):
+    def test_first_run_language_then_quick_setup_then_status_then_quit(self):
         seen, code = self.drive([
             ("Language / Langue", "\x1b[B"),              # arrow down: Francais
             ("Français", "\r"),                            # Enter: choose it
-            ("Que veux-tu faire", "5"),                    # direct jump to "État"
+            ("Vérifier à nouveau", "2"),                   # no Claude Code token here: go on without it
+            ("Faire les relevés automatiquement", "2"),    # do not install anything from a test
+            ("Ouvrir le widget maintenant", "2"),
+            ("Appuie sur Entrée pour aller au menu", "\r"),
+            ("Que veux-tu faire", "3"),                    # direct jump to "État" (group "Voir")
             ("Dernier relevé", "\r"),                      # status shown, Enter to go back
-            ("Que veux-tu faire", "q"),                    # quit
+            ("relevé auto", "q"),                          # the state line is on top of the menu; quit
             ("À bientôt", ""),
         ])
         self.assertEqual(code, 0)
-        self.assertIn('"lang": "fr"', (self.dir / "data" / "config.json").read_text(encoding="utf-8"))
+        cfg = json.loads((self.dir / "data" / "config.json").read_text(encoding="utf-8"))
+        self.assertEqual(cfg.get("lang"), "fr")
+        self.assertTrue(cfg.get("setup_done"))
 
     def test_read_without_credentials_reports_a_clear_error(self):
         env = dict(os.environ, CLAUDE_CONFIG_DIR=str(self.dir / "no-claude"))
