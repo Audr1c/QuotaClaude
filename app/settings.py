@@ -20,9 +20,10 @@ _lock = threading.Lock()
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 THEME_PRESETS = ("claude", "contrast", "colorblind", "mono")
 THEME_COLORS = ("five", "seven", "ok", "bad")          # the colours a user may override (THM-1)
+THEME_FONTS = ("default", "sans", "serif", "mono")     # system fonts only, nothing is downloaded
 
 DEFAULTS = {"level": "auto", "notes": True, "work_hours": False, "hours": 8, "lang": None,
-            "theme": {"preset": "claude", "light": {}, "dark": {}}}
+            "theme": {"preset": "claude", "light": {}, "dark": {}, "font": "default"}}
 
 
 def _level(v):
@@ -58,12 +59,19 @@ def _colors(v):
 
 
 def _theme(v):
-    if not isinstance(v, dict) or set(v) - {"preset", "light", "dark"}:
-        raise ValueError("theme: {preset, light, dark}")
-    preset = v.get("preset", "claude")
+    if not isinstance(v, dict) or set(v) - {"name", "preset", "light", "dark", "font"}:
+        raise ValueError("theme: {name, preset, light, dark, font}")
+    preset, font, name = v.get("preset", "claude"), v.get("font", "default"), v.get("name", "")
     if preset not in THEME_PRESETS:
         raise ValueError(f"theme.preset: one of {', '.join(THEME_PRESETS)}")
-    return {"preset": preset, "light": _colors(v.get("light", {})), "dark": _colors(v.get("dark", {}))}
+    if font not in THEME_FONTS:
+        raise ValueError(f"theme.font: one of {', '.join(THEME_FONTS)}")
+    if not isinstance(name, str) or len(name) > 40 or not re.fullmatch(r"[\w .,'()-]*", name):
+        raise ValueError("theme.name: up to 40 letters, digits, spaces")
+    out = {"preset": preset, "light": _colors(v.get("light", {})), "dark": _colors(v.get("dark", {})), "font": font}
+    if name:
+        out["name"] = name
+    return out
 
 
 CHECKS = {"level": _level, "notes": _bool("notes"), "work_hours": _bool("work_hours"), "hours": _hours,

@@ -314,6 +314,10 @@
     }).catch(() => { /* server unreachable: keep the local settings */ });
   }
 
+  /* ---------- theme panel (THM-1) ---------- */
+  const openTheme = CU.themePanel ? CU.themePanel($("theme-dlg"), th => share({ theme: th })) : null;
+  $("theme-open").addEventListener("click", () => openTheme && openTheme());
+
   /* ---------- start ---------- */
   applyLanguage();
   loadShared().then(() => { applyLanguage(); return loadData(); }).then(render);

@@ -44,7 +44,7 @@ Ce qui était vérifié et correct dès la 1.1.0 : écoute sur `127.0.0.1` seule
 | 6 | ✅ `ONB-1` | Assistant de première utilisation et menu plus clair (fait) | M | — |
 | 7 | ✅ `ACC-1` | Lancer et ouvrir le widget sans terminal (fait : pistes 1 à 4 ; la 5, icône de notification, reste à étudier) | M | `ONB-1` |
 | 8 | ✅ `API-1`, `API-2` | Socle commun : stockage unique, API de lecture versionnée, réglages côté serveur (fait) | M à L | — |
-| 9 | `THM-1` | Thème personnalisable | M | `API-2` |
+| 9 | ✅ `THM-1` | Thème personnalisable (fait) | M | `API-2` |
 | 10 | `VSC-1` | Extension VS Code : vue latérale et indicateur dans la barre d'état | M à L | `API-1`, `UI-5` |
 | 11 | `HUB-1` | Poller sur une machine toujours allumée | L | `API-1` |
 | 12 | `AND-1` | Android : PWA d'abord, widget natif ensuite | L | `API-1`, `HUB-1` |

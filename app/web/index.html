@@ -35,6 +35,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span data-i18n="refresh">Refresh</span>
         </button>
+        <button type="button" class="btn" id="theme-open" aria-haspopup="dialog" data-i18n="theme.title" data-i18n-title="theme.hint">Theme</button>
         <button type="button" class="btn qbtn-big" id="how-open" aria-haspopup="dialog" data-i18n-title="formulas.title" data-i18n-aria="formulas.title">?</button>
       </div>
     </header>
@@ -57,6 +58,14 @@
         </div>
       </aside>
     </div>
+    <dialog id="theme-dlg" class="how" aria-labelledby="theme-title">
+      <div class="how-head">
+        <h2 id="theme-title" data-i18n="theme.title">Theme</h2>
+        <span class="hint" data-i18n="theme.hint">colours and font, shared by every client</span>
+        <button type="button" class="btn" id="theme-close" data-i18n-aria="close" data-i18n-title="close">✕</button>
+      </div>
+      <div id="theme-body"></div>
+    </dialog>
     <dialog id="how" class="how" aria-labelledby="how-title">
       <div class="how-head">
         <h2 id="how-title" data-i18n="formulas.title">How it is computed</h2>
@@ -70,6 +79,7 @@
   <!-- initial data (also works when this page is opened as a plain file) -->
   <script src="../data/latest.js"></script>
   <script src="js/i18n.js"></script>
+  <script src="js/theme.js"></script>
   <script src="js/model.js"></script>
   <script src="js/gauge.js"></script>
   <script src="js/views.js"></script>

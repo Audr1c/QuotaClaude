@@ -6,6 +6,7 @@
   --blue: #5A8DC2; --blue-ink: #3F73A8;   /* blue darkened for 3:1 on the light card */ --violet: #8B6FB0;
   --sage: #6B7F52; --ok: #6B8F4E; --bad: #C2453B;
   --serif: "Tiempos Text", Georgia, "Times New Roman", serif;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -23,7 +24,7 @@
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.45 var(--sans);
 }
 .wrap { max-width: 1680px; margin: 0 auto; padding: 28px 16px 32px; }
 
@@ -325,3 +326,13 @@ dialog.how::backdrop { background: rgba(20, 20, 19, .35); }
 .chart svg.mini:focus-visible { outline: 2px solid var(--blue-ink); outline-offset: 2px; }
 /* small screens: the charts are scaled down with their viewBox, so their axis labels need bigger units */
 @media (max-width: 600px) { .chart svg.plot .ax { font-size: 17px; } }
+
+/* ---------- theme panel (THM-1) ---------- */
+.trows { display: grid; gap: 8px; margin-top: 10px; }
+.trow { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 10px; font-size: 13px; }
+.trow input[type="color"] { width: 44px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 2px; cursor: pointer; }
+.trow .warn { grid-column: 2 / 4; color: var(--bad); font-size: 11px; }
+#theme-json { width: 100%; font: 12px/1.4 ui-monospace, "SF Mono", Consolas, monospace; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); padding: 8px; resize: vertical; }
+.tbtns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.how .sub { margin: 18px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+body[data-level="1"] #theme-open, body[data-level="2"] #theme-open, body[data-level="3"] #theme-open, body[data-level="4"] #theme-open { display: none; }
