@@ -251,17 +251,35 @@ def _same(a: datetime | None, b: datetime | None) -> bool:
     return a is not None and b is not None and abs((a - b).total_seconds()) <= SAME_WINDOW_TOLERANCE_S
 
 
+def _new_window_start(a: dict, b: dict) -> float | None:
+    """5h % of reading b when b opens a NEW 5-hour window that began after reading a (usage counted from 0), else None.
+    If the window began before a, the usage between its start and a is unknown, so nothing is counted."""
+    b5 = num(b.get("five_hour_pct"))
+    rb, ta, tb = parse_dt(b.get("five_hour_resets_at")), parse_dt(a.get("timestamp")), parse_dt(b.get("timestamp"))
+    if b5 is None or b5 <= 0 or rb is None or ta is None or tb is None:
+        return None
+    if _same(parse_dt(a.get("five_hour_resets_at")), rb):
+        return None
+    start = rb - timedelta(hours=5)
+    return b5 if ta <= start <= tb else None
+
+
 def _same_window_deltas(rows: list[dict]):
-    """(timestamp, d5, d7) for each pair of consecutive readings inside the SAME windows with d5 > 0 and d7 >= 0."""
+    """(timestamp, d5, d7) for each pair of consecutive readings with d5 > 0 and d7 >= 0, inside the SAME weekly window.
+    The 5h part is either the increase inside the same 5-hour window or, when b opens a new window that began after a,
+    b's own 5h % (counted from 0, see _new_window_start)."""
     for a, b in zip(rows, rows[1:]):
         a5, b5 = num(a.get("five_hour_pct")), num(b.get("five_hour_pct"))
         a7, b7 = num(a.get("seven_day_pct")), num(b.get("seven_day_pct"))
-        if None in (a5, b5, a7, b7):
+        if None in (a7, b7) or not _same(parse_dt(a.get("seven_day_resets_at")), parse_dt(b.get("seven_day_resets_at"))):
             continue
-        if not (_same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at")))
-                and _same(parse_dt(a.get("seven_day_resets_at")), parse_dt(b.get("seven_day_resets_at")))):
-            continue
-        d5, d7 = b5 - a5, b7 - a7
+        if None not in (a5, b5) and _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+            d5 = b5 - a5
+        else:
+            d5 = _new_window_start(a, b)
+            if d5 is None:
+                continue
+        d7 = b7 - a7
         if d5 > 0 and d7 >= 0:
             yield b["timestamp"], d5, d7
 
@@ -295,16 +313,18 @@ def tokens_state(data_dir: Path, rows: list[dict], now: datetime):
 
 def hourly_5h(rows: list[dict]) -> list:
     """5-hour usage consumed per clock hour (UTC), whole history: [[hour_iso, 5h-%]], hours without usage left out.
-    Sum of the increases between consecutive readings of the same 5-hour window, credited to the later reading's hour."""
+    Sum of the increases between consecutive readings of the same 5-hour window (plus the first reading of a new window), credited to the later reading's hour."""
     out: dict = {}
     for a, b in zip(rows, rows[1:]):
         a5, b5 = num(a.get("five_hour_pct")), num(b.get("five_hour_pct"))
-        if None in (a5, b5) or b5 <= a5:
-            continue
-        if not _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+        if None not in (a5, b5) and _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+            d5 = b5 - a5
+        else:
+            d5 = _new_window_start(a, b)        # first reading of a new window: its % counts from 0
+        if d5 is None or d5 <= 0:
             continue
         h = parse_dt(b["timestamp"]).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
-        out[h] = out.get(h, 0.0) + (b5 - a5)
+        out[h] = out.get(h, 0.0) + d5
     return [[h, round(v, 1)] for h, v in sorted(out.items())]
 
 

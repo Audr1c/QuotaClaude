@@ -26,3 +26,6 @@ repos-externes/
 
 # Local audit reports (they quote paths and project names of the machine)
 AUDIT-*.md
+
+# Sub-agent worktrees (Claude Code)
+.claude/worktrees/
