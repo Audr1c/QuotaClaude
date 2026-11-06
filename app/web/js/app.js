@@ -85,7 +85,11 @@
       return;
     }
     const restoreFocus = CU.captureFocus($("app"));          // the page is rebuilt below: keep the keyboard focus where it was
-    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.charts(m).replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : ""));
+    const open = html => html.replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : ""));
+    // three columns on a wide screen (gauges, history charts, tokens), stacked when there is no room (style.css)
+    $("app").innerHTML = `<div class="dash"><div class="col col-gauges">${CU.views[view](m)}${CU.breakdown(m, breakdownOpen)}</div>`
+      + `<div class="col col-charts">${open(CU.charts(m, ["hourly", "ratio"]))}</div>`
+      + `<div class="col col-tokens">${open(CU.charts(m, ["tokens"]))}</div></div>`;
     applyNotes();
     CU.fitBars($("app"));
     CU.chartsAfterRender($("app"));
@@ -152,6 +156,23 @@
     if (d && !d.open && notesOn !== noteFlip[key]) d.open = true;      // showing the note of a folded panel opens it
     applyNotes();
   });
+
+  /* ---------- tooltips that also work on a touch screen: a tap (or click) shows the element's title ---------- */
+  const tip = document.createElement("div");
+  tip.className = "tip"; tip.hidden = true; tip.setAttribute("role", "status");
+  document.body.appendChild(tip);
+  const titleOf = el => el.getAttribute("title") || (el.querySelector && el.querySelector(":scope > title") ? el.querySelector(":scope > title").textContent : "");
+  document.addEventListener("click", e => {
+    if (Date.now() - (CU.tipSuppress || 0) < 400) return;            // the end of a drag on a chart is not a tap
+    const el = e.target.closest && e.target.closest("#app svg.plot rect, #app svg.plot circle, #app .bars .day, #app .share span, #app .tbar span");
+    const text = el && titleOf(el);
+    if (!text) { tip.hidden = true; return; }
+    tip.textContent = text; tip.hidden = false;
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth;
+    tip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + "px";
+    tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + scrollY + "px";
+  });
+  window.addEventListener("scroll", () => { tip.hidden = true; }, { passive: true });
 
   /* ---------- "how it is computed": a floating panel opened by the "?" button ---------- */
   const how = $("how");

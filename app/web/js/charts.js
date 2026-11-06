@@ -156,7 +156,7 @@ window.CU = window.CU || {};
         <table class="eqs tokens types"><tr><th></th><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.pctt")}</td><td>${t("chart.tokens.c.price")}</td><td>${t("chart.tokens.c.pctc")}</td></tr>${rows}</table>
         <p class="note" data-note="tokens">${t("chart.tokens.hitnote")}</p>
         <h3 class="sub">${t("chart.tokens.byday")}</h3>
-        <table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.cache")}</td><td>${t("chart.tokens.c.cost")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.costpct")}</td></tr>${drows}</table>` };
+        <div class="hscroll"><table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.cache")}</td><td>${t("chart.tokens.c.cost")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.costpct")}</td></tr>${drows}</table></div>` };
   }
 
   /* ---------- the chart definitions ---------- */
@@ -257,10 +257,9 @@ window.CU = window.CU || {};
     svg.setAttribute("aria-valuetext", p.label);
   }
 
-  CU.charts = function (m) {
+  CU.charts = function (m, keys) {                                      // keys: which charts (default: all of them)
     CU.lastModel = m;
-    const html = Object.values(DEFS).filter(d => d.ready(m)).map(d => card(d, m)).join("");
-    return html;
+    return Object.values(DEFS).filter(d => (!keys || keys.includes(d.key)) && d.ready(m)).map(d => card(d, m)).join("");
   };
   CU.charts.internals = { hourlyBuckets, bucketHours };                 // for the tests (test_audit.py)
   CU.chartsAfterRender = function (root) {                              // window rectangles need the overview to exist
@@ -325,7 +324,7 @@ window.CU = window.CU || {};
     if (!svg || !CU.lastModel) return;
     const el = svg.closest(".chart"), def = DEFS[el.dataset.key], m = CU.lastModel, s = state(def);
     const [lo, hi] = def.domain(m), [a, b] = win(s, lo, hi, def.minSpan), r = svg.getBoundingClientRect(), k_ = r.width / W;
-    const px = ms => r.left + mx(ms, lo, hi) * k_, x = e.clientX, edge = 9;
+    const px = ms => r.left + mx(ms, lo, hi) * k_, x = e.clientX, edge = e.pointerType === "touch" ? 22 : 9;
     let mode = Math.abs(x - px(a)) <= edge ? "l" : Math.abs(x - px(b)) <= edge ? "r" : x > px(a) && x < px(b) ? "m" : "c", a0 = a, b0 = b;
     if (mode === "c") {                                               // click outside: centre the window there
       const at = lo + (x - px(lo)) / (px(hi) - px(lo)) * (hi - lo), span = b - a;
@@ -348,6 +347,60 @@ window.CU = window.CU || {};
     refresh(d.el);
   }
   document.addEventListener("pointermove", e => { if (drag) apply(e.clientX); });
+
+  /* Main plot (charts with an overview): drag to move the range, pinch with two fingers to zoom. A press that
+     barely moves is a tap: it is left to the tooltip (CU.tip). */
+  const touch = { pts: new Map(), el: null, start: null };
+  function plotRange(el) {
+    const def = DEFS[el.dataset.key], m = CU.lastModel, s = state(def), [lo, hi] = def.domain(m), [a, b] = win(s, lo, hi, def.minSpan);
+    return { def, s, lo, hi, a, b };
+  }
+  document.addEventListener("pointerdown", e => {
+    const svg = e.target.closest && e.target.closest("svg.plot");
+    const el = svg && svg.closest(".chart");
+    if (!el || !CU.lastModel || !el.querySelector("svg.mini")) return;
+    touch.pts.set(e.pointerId, e.clientX);
+    if (touch.el !== el) { touch.el = el; touch.pts = new Map([[e.pointerId, e.clientX]]); }
+    const r = svg.getBoundingClientRect(), xs = [...touch.pts.values()];
+    touch.start = Object.assign(plotRange(el), { xs, px: (W - L - R) * r.width / W, left: r.left + L * r.width / W, moved: false });
+    try { svg.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  });
+  document.addEventListener("pointermove", e => {
+    if (!touch.start || !touch.pts.has(e.pointerId)) return;
+    touch.pts.set(e.pointerId, e.clientX);
+    const st = touch.start, xs = [...touch.pts.values()], span0 = st.b - st.a, perPx = span0 / st.px;
+    let a, b;
+    if (xs.length >= 2 && st.xs.length >= 2) {                         // pinch: keep the point under the fingers' middle
+      const d0 = Math.abs(st.xs[0] - st.xs[1]) || 1, d1 = Math.abs(xs[0] - xs[1]) || 1;
+      const span = clamp(span0 * d0 / d1, st.def.minSpan, st.hi - st.lo);
+      const c0 = st.a + ((st.xs[0] + st.xs[1]) / 2 - st.left) * perPx, f_ = (c0 - st.a) / span0;
+      const c1 = (xs[0] + xs[1]) / 2;
+      a = c0 - f_ * span - (c1 - (st.xs[0] + st.xs[1]) / 2) * span / st.px; b = a + span;
+    } else {
+      const dx = xs[0] - st.xs[0];
+      if (!st.moved && Math.abs(dx) < 6) return;
+      a = st.a - dx * perPx; b = st.b - dx * perPx;
+    }
+    st.moved = true; CU.dragging = true;
+    const span = b - a;
+    if (a < st.lo) { a = st.lo; b = a + span; }
+    if (b > st.hi) { b = st.hi; a = b - span; }
+    st.s.span = b - a; st.s.end = b >= st.hi - (st.hi - st.lo) * 0.004 ? null : b;
+    refresh(touch.el);
+  });
+  const endTouch = e => {
+    if (!touch.pts.delete(e.pointerId)) return;
+    if (touch.start && touch.start.moved) { CU.tipSuppress = Date.now(); save(); }
+    if (touch.pts.size && touch.start) {                               // one finger left: go on from the current range
+      const pr = plotRange(touch.el);
+      touch.start = Object.assign({}, touch.start, { xs: [...touch.pts.values()], a: pr.a, b: pr.b });
+      return;
+    }
+    touch.start = null; touch.el = null;
+    if (!drag) CU.dragging = false;
+  };
+  document.addEventListener("pointerup", endTouch);
+  document.addEventListener("pointercancel", endTouch);
   const stop = () => { if (!drag) return; drag = null; CU.dragging = false; save(); };
   document.addEventListener("pointerup", stop);
   document.addEventListener("pointercancel", stop);
