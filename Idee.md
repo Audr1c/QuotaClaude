@@ -354,15 +354,15 @@ Déjà disponibles dans `latest.json` mais masqués dans le panneau depuis la re
 
 | Code | Point | Effort |
 |---|---|---|
-| `RES-1` | Relecture complète de `usage.csv` à chaque relevé : analyser les dates une fois, ou cache incrémental (≈ 3 s par relevé à 100 000 lignes) | M |
-| `RES-2` | Volume d'écriture dans `data/` à chaque relevé (surtout si le dossier est synchronisé) : n'écrire que ce qui a changé | M |
-| `RES-3` | Poller : réveil toutes les 5 s (`TICK_S`), à allonger quand il n'y a rien à surveiller ; premier palier de 30 s à reconsidérer | S |
+| `RES-1` | ✅ Relecture complète de `usage.csv` à chaque relevé : analyser les dates une fois, ou cache incrémental (≈ 3 s par relevé à 100 000 lignes) | M |
+| `RES-2` | ✅ Volume d'écriture dans `data/` à chaque relevé (surtout si le dossier est synchronisé) : n'écrire que ce qui a changé | M |
+| `RES-3` | ✅ Poller : réveil toutes les 5 s (`TICK_S`), à allonger quand il n'y a rien à surveiller ; premier palier de 30 s à reconsidérer | S |
 | `RES-4` | ✅ Widget : ne pas re-rendre toutes les 10 s si les données n'ont pas changé, pause quand l'onglet est caché (`visibilityState`) | S |
-| `SEC-1` | Pas de verrou entre le serveur et le poller (deux relevés simultanés possibles) | M |
+| `SEC-1` | ✅ Pas de verrou entre le serveur et le poller (deux relevés simultanés possibles) | M |
 | `SEC-2` | ✅ Machine partagée : `SO_EXCLUSIVEADDRUSE` sous Windows, droits `chmod 600` de `data/` sous Linux | S |
 | `SEC-3` | ✅ Le lanceur vérifie mieux le pid renvoyé par `/api/ping` avant de l'arrêter | S |
-| `DAT-1` | Le premier relevé d'une nouvelle fenêtre de 5 h n'est pas compté dans l'usage par heure ni dans le ratio | S |
-| `DAT-2` | Jours UTC (tokens, ratio) contre jours locaux (répartition par produit, usage par heure) : harmoniser ou le dire dans les libellés | M |
+| `DAT-1` | ✅ Le premier relevé d'une nouvelle fenêtre de 5 h n'est pas compté dans l'usage par heure ni dans le ratio | S |
+| `DAT-2` | ✅ Jours UTC (tokens, ratio) contre jours locaux (répartition par produit, usage par heure) : harmoniser ou le dire dans les libellés | M |
 | `DAT-3` | ✅ Année absente des libellés de plage au-delà d'un an | S |
 | `TST-1` | Tests JavaScript plus larges (rendu des graphiques, glisser-déposer, passage à l'heure d'été) et test dans un vrai navigateur | M |
 | `TST-2` | ✅ Vérifier la compatibilité Python 3.8 à 3.10 (annoncée « 3.8+ » mais non testée) (3.8, 3.10 et 3.13 vérifiés) | S |
