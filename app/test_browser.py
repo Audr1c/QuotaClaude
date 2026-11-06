@@ -113,8 +113,9 @@ async function drags(page) {
   const out = { start: await label(page) };
   const plot = await (await page.$('[data-key=hourly] svg.plot')).boundingBox();
   const cy = plot.y + plot.height / 2;
-  await page.mouse.move(plot.x + plot.width * 0.7, cy); await page.mouse.down();
-  await page.mouse.move(plot.x + plot.width * 0.4, cy, { steps: 8 }); await page.mouse.up();
+  // drag to the right = back in time (the range starts at the present, it cannot go further right)
+  await page.mouse.move(plot.x + plot.width * 0.4, cy); await page.mouse.down();
+  await page.mouse.move(plot.x + plot.width * 0.7, cy, { steps: 8 }); await page.mouse.up();
   await sleep(200);
   out.afterPlot = await label(page);
   out.beforeMini = out.afterPlot;
@@ -212,9 +213,10 @@ class BrowserTest(unittest.TestCase):
     def test_levels(self):
         lv = self.r["levels"]
         if lv is None:
-            self.skipTest("this widget version has no #level slider")
+            self.fail("the widget has no #level slider")
         for n in range(1, 10):
-            self.assertEqual(lv[str(n)]["level"], str(n))
+            # level 9 with Explanations on (the default) is shown as level 10
+            self.assertIn(lv[str(n)]["level"], (str(n), "10") if n == 9 else (str(n),))
         self.assertTrue(lv["1"]["strip"])
         self.assertTrue(lv["4"]["compact"])
         self.assertEqual(lv["5"]["gauges"], 2)
@@ -228,7 +230,7 @@ class BrowserTest(unittest.TestCase):
     def test_notes_toggle(self):
         n = self.r["notes"]
         if n is None:
-            self.skipTest("this widget version has no #notes button")
+            self.fail("the widget has no #notes button")
         self.assertGreater(n["before"]["total"], 0)
         self.assertNotEqual(n["before"]["hidden"], n["after"]["hidden"])
         self.assertEqual(n["before"]["hidden"], n["again"]["hidden"])
@@ -240,8 +242,6 @@ class BrowserTest(unittest.TestCase):
 
     def test_drag_plot(self):
         d = self.r["drag"]
-        if d["afterPlot"] == d["start"]:
-            self.skipTest("dragging svg.plot does not move the range in this widget version (only svg.mini does)")
         self.assertNotEqual(d["afterPlot"], d["start"])
 
     def test_dst_hourly_buckets(self):
