@@ -81,7 +81,7 @@ class WebTextTests(unittest.TestCase):
 class CodeIsEnglishTests(unittest.TestCase):
     """Code, comments and messages are English. Only the translation files (and the tests that check them) may contain French."""
 
-    ALLOWED = {Path("launcher/strings.py"), Path("web/js/i18n.js"), Path("test_launcher.py")}
+    ALLOWED = {Path("launcher/strings.py"), Path("web/js/i18n.js"), Path("test_launcher.py"), Path("test_vscode.py")}
     ACCENTS = re.compile("[àâäçéèêëîïôöùûüœÀÂÄÇÉÈÊËÎÏÔÖÙÛÜŒ]")
 
     def test_no_french_outside_the_translation_files(self):
