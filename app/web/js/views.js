@@ -52,7 +52,7 @@ window.CU = window.CU || {};
         })}
         <ul class="legend">
           ${li("dot", CLAY, t("legend.used"), pct(seven.used))}
-          ${li("tri", CLAY_INK, t("legend.pace7"), pct(seven.pace))}
+          ${li("tri", CLAY_INK, t(m.workHours ? "legend.pace7.work" : "legend.pace7"), pct(seven.pace))}
           ${li("sp", "", t("legend.perday"), pct(seven.ratePerDay, 1) + " " + t("unit.perday"))}
           ${li("sp", "", t("legend.sessions"), "≈ " + num(seven.sessionsLeft))}
           ${li("sp", "", t("legend.today"), pct(seven.todayLeft, 1))}
@@ -160,11 +160,12 @@ window.CU = window.CU || {};
     const { five, seven } = m, H = 3600e3, dash = "—";
     const hl5 = five.left / H, dl7 = seven.left / (24 * H);
     const p1 = v => v == null ? dash : pct(v, 1), n2 = v => v == null ? dash : num(v, 2);
+    const w = m.workHours ? "slider" : "";             // rows that depend on the working-hours slider (only when it is on)
     const rows = [
       ["used", "", "", `${p1(five.used)} / ${p1(seven.used)}`],
       ["pace5", "", `(5 h − ${n2(hl5)} h) / 5 h`, p1(five.pace)],
-      ["start", "", "", seven.work && seven.work.startToday ? hhmm(seven.work.startToday.ms) + " " + (seven.work.startToday.auto ? t("f.start.auto") : t("f.start.def")) : dash],
-      ["pace7", "slider", seven.work ? `${n2(seven.work.elapsedH)} h / ${n2(seven.work.totalH)} h` : "", p1(seven.pace)],
+      w && ["start", "", "", seven.work && seven.work.startToday ? hhmm(seven.work.startToday.ms) + " " + (seven.work.startToday.auto ? t("f.start.auto") : t("f.start.def")) : dash],
+      [w ? "pace7" : "pace7.cal", w, seven.work ? `${n2(seven.work.elapsedH)} h / ${n2(seven.work.totalH)} h` : "", p1(seven.pace)],
       ["ratio", "", m.ratioEstimated ? t("f.ratio.est") : t("f.ratio.def"), p1(m.ratio)],
       ["u0", "", "", p1(seven.startUsed)],
       ["days", "", "", n2(seven.daysLeft) + " d"],
@@ -172,15 +173,15 @@ window.CU = window.CU || {};
       ["l7", "", `${p1(seven.startUsed)} + ${p1(seven.dailyBudget)}`, p1(seven.limit)],
       ["left", "", `max(0, ${p1(seven.limit)} − ${p1(seven.used)})`, p1(seven.todayLeft)],
       ["l5", "", `${p1(five.used)} + ${p1(seven.todayLeft)} × 100 / ${p1(m.ratio)}`, p1(five.limit)],
-      ["rate", "slider", `${p1(seven.dailyBudget)} / ${m.hours} h × 100 / ${p1(m.ratio)}`, p1(five.paceRate) + t("unit.perhour")],
+      ["rate", w, `${p1(seven.dailyBudget)} / ${m.hours} h × 100 / ${p1(m.ratio)}`, p1(five.paceRate) + t("unit.perhour")],
       ["max", "", `(100 − ${p1(five.used)}) / ${n2(hl5)} h`, p1(five.maxRate) + t("unit.perhour")],
       ["win", "", `(100 − ${p1(seven.used)}) / ${p1(m.ratio)}`, "≈ " + num(seven.sessionsLeft)],
       ["share", "", "", ""],
-    ];
+    ].filter(Boolean);
     return `
       <details class="card formulas" data-key="formulas"${open ? " open" : ""}>
         <summary><h2>${t("formulas.title")}</h2><span class="hint">${t("formulas.hint")}</span></summary>
-        <p class="note">${t("formulas.slider")}</p>
+        <p class="note">${t(w ? "formulas.slider" : "formulas.slider.off")}</p>
         <table class="eqs">
           ${rows.map(([id, flag, calc, val]) => `
             <tr${flag ? ' class="flag"' : ""}>

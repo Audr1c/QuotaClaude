@@ -12,15 +12,16 @@
 
   const SERVED = location.protocol.startsWith("http");
   const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen", FORMULAS_KEY = "cu.formulasOpen";
-  const HOURS_KEY = "cu.hours";
+  const HOURS_KEY = "cu.hours", WORK_KEY = "cu.workHours";
   const chartsOpen = {};
-  let view = "detail", breakdownOpen = false, formulasOpen = false, hours = 8;
+  let view = "detail", breakdownOpen = false, formulasOpen = false, hours = 8, workOn = false;
   try {
     const saved = parseInt(localStorage.getItem(HOURS_KEY), 10);
     if (saved >= 1 && saved <= 24) hours = saved;
     view = localStorage.getItem(VIEW_KEY) || "detail";
     breakdownOpen = localStorage.getItem(BREAKDOWN_KEY) === "1";
     formulasOpen = localStorage.getItem(FORMULAS_KEY) === "1";
+    workOn = localStorage.getItem(WORK_KEY) === "1";
   } catch (e) { /* storage unavailable */ }
   if (!CU.views[view]) view = "detail";
 
@@ -75,7 +76,7 @@
   /* ---------- rendering ---------- */
   function render() {
     if (CU.dragging) return;                 // a chart range is being dragged: do not rebuild the page under the pointer
-    const D = window.CLAUDE_USAGE, m = CU.compute(D, Date.now(), { hoursPerDay: hours });
+    const D = window.CLAUDE_USAGE, m = CU.compute(D, Date.now(), { hoursPerDay: workOn ? hours : 24, workHours: workOn });
     const err = $("err");
     if (!m) {
       $("app").innerHTML = `<div class="card empty">${CU.t("empty")}</div>`;
@@ -124,6 +125,21 @@
     showHours();
     render();
   });
+
+  /* ---------- working-hours switch: off = the week's pace follows calendar time (24 h a day), slider hidden ---------- */
+  const workBox = $("work-on");
+  function showWork() {
+    workBox.checked = workOn;
+    $("hours-panel").hidden = !workOn;
+    $("hours-box").classList.toggle("off", !workOn);
+  }
+  workBox.addEventListener("change", () => {
+    workOn = workBox.checked;
+    try { localStorage.setItem(WORK_KEY, workOn ? "1" : "0"); } catch (e) { /* ignore */ }
+    showWork();
+    render();
+  });
+  showWork();
 
   /* ---------- view switch (detailed / compact) ---------- */
   function setView(v) {

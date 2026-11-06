@@ -36,7 +36,7 @@ Ce qui était vérifié et correct dès la 1.1.0 : écoute sur `127.0.0.1` seule
 
 | # | Code | Idée | Effort | Dépend de |
 |---|---|---|---|---|
-| 1 | `UI-3` | Rythme selon les heures de travail : interrupteur on/off | S | — |
+| 1 | ✅ `UI-3` | Rythme selon les heures de travail : interrupteur on/off (fait) | S | — |
 | 2 | `UI-1` | Textes d'aide : raccourcir, supprimer les doublons, pouvoir les masquer | S à M | — |
 | 3 | `UI-4` | Graduations de temps sur les deux cadrans | M | `UI-3` (pour la semaine) |
 | 4 | `UI-2` | Page qui utilise la largeur, compatible tactile, vue compacte lisible | M à L | `UI-1` |

@@ -32,12 +32,19 @@
     <div id="err" class="err" hidden></div>
     <div class="layout">
       <main id="app"></main>
-      <aside class="hours card" id="hours-box" data-i18n-title="hours.hint">
-        <h2 data-i18n="hours.title">Hours per day</h2>
-        <output id="hours-value" for="hours" class="hours-value">8 h</output>
-        <div class="slider">
-          <div class="ticks" id="hours-ticks" aria-hidden="true"></div>
-          <input type="range" id="hours" min="1" max="24" step="1" value="8" data-i18n-aria="hours.aria">
+      <aside class="hours card" id="hours-box">
+        <label class="switch" data-i18n-title="work.hint">
+          <input type="checkbox" id="work-on">
+          <span class="knob" aria-hidden="true"></span>
+          <span class="switch-label" data-i18n="work.toggle">Pace by my working hours</span>
+        </label>
+        <div id="hours-panel" hidden>
+          <h2 data-i18n="hours.title" data-i18n-title="hours.hint">Hours per day</h2>
+          <output id="hours-value" for="hours" class="hours-value">8 h</output>
+          <div class="slider">
+            <div class="ticks" id="hours-ticks" aria-hidden="true"></div>
+            <input type="range" id="hours" min="1" max="24" step="1" value="8" data-i18n-aria="hours.aria">
+          </div>
         </div>
       </aside>
     </div>
