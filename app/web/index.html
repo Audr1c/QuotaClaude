@@ -15,15 +15,18 @@
       <h1><span data-i18n="app.title">Claude usage</span><span class="accent">.</span></h1>
       <div class="tools">
         <span class="meta" id="meta">—</span>
-        <div class="seg" role="group" data-i18n-aria="view.label">
-          <button type="button" data-view="detail" aria-pressed="true" data-i18n="view.detail">Detailed</button>
-          <button type="button" data-view="compact" aria-pressed="false" data-i18n="view.compact">Compact</button>
+        <div class="density">
+          <label for="level" data-i18n="level.label">Detail</label>
+          <input type="range" id="level" min="1" max="9" step="1" value="9" data-i18n-aria="level.aria">
+          <output id="level-value" for="level">9/9</output>
+          <button type="button" class="btn small" id="level-auto" aria-pressed="true" data-i18n="level.auto" data-i18n-title="level.auto.title">Auto</button>
+          <span class="sep" aria-hidden="true"></span>
+          <button type="button" class="btn toggle" id="notes" aria-pressed="true" data-i18n-title="notes.title"><span data-i18n="notes.label">Explanations</span></button>
         </div>
         <div class="seg lang" role="group" data-i18n-aria="lang.label">
           <button type="button" data-lang="en" aria-pressed="true">EN</button>
           <button type="button" data-lang="fr" aria-pressed="false">FR</button>
         </div>
-        <button type="button" class="btn toggle" id="notes" aria-pressed="true" data-i18n-title="notes.title"><span data-i18n="notes.label">Explanations</span></button>
         <button type="button" class="btn" id="refresh" data-i18n-title="refresh.title">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span data-i18n="refresh">Refresh</span>

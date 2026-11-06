@@ -1,4 +1,4 @@
-/* app.js: data loading, view and language switches, refresh button, auto-refresh.
+/* app.js: data loading, compactness level, language switch, refresh button, auto-refresh.
    Two modes:
      - through the local server (http://127.0.0.1:8765): data as JSON + the Refresh button works;
      - file opened directly (file://): data via data/latest.js, Refresh button disabled. */
@@ -11,19 +11,19 @@
   }
 
   const SERVED = location.protocol.startsWith("http");
-  const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen", NOTES_KEY = "cu.notes";
+  const LEVEL_KEY = "cu.level", BREAKDOWN_KEY = "cu.breakdownOpen", NOTES_KEY = "cu.notes";
   const HOURS_KEY = "cu.hours", WORK_KEY = "cu.workHours";
   const chartsOpen = {};
-  let view = "detail", breakdownOpen = false, notesOn = true, hours = 8, workOn = false;
+  let levelPref = "auto", breakdownOpen = false, notesOn = true, hours = 8, workOn = false;
   try {
     const saved = parseInt(localStorage.getItem(HOURS_KEY), 10);
     if (saved >= 1 && saved <= 24) hours = saved;
-    view = localStorage.getItem(VIEW_KEY) || "detail";
+    const lv = parseInt(localStorage.getItem(LEVEL_KEY), 10);
+    if (lv >= 1 && lv <= 9) levelPref = lv;
     breakdownOpen = localStorage.getItem(BREAKDOWN_KEY) === "1";
     notesOn = localStorage.getItem(NOTES_KEY) !== "0";
     workOn = localStorage.getItem(WORK_KEY) === "1";
   } catch (e) { /* storage unavailable */ }
-  if (!CU.views[view]) view = "detail";
 
   // the breakdown <details> is recreated on every render: remember whether it is open
   $("app").addEventListener("toggle", e => {
@@ -85,11 +85,17 @@
       return;
     }
     const restoreFocus = CU.captureFocus($("app"));          // the page is rebuilt below: keep the keyboard focus where it was
-    const open = html => html.replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : ""));
+    const L = level();
+    const open = html => html.replace(/<details class="card chart" data-key="(\w+)"[^>]*/g, (a, k) => a + (chartsOpen[k] === false ? "" : " open"));
+    // Each level keeps everything of the level below and adds to it (UI-5):
+    // 1-3 strip, 4 the two rings in one gauge, 5 two gauges + key figures, 6 + hourly chart, 7 + ratio chart and the tokens
+    // summary, 8 full charts, 9 everything (breakdown, per-day tokens, settings), 10 = 9 + the explanations.
+    const gauges = L <= 3 ? CU.strip(m, L) : L === 4 ? CU.views.compact(m) : CU.views.detail(m);
+    const charts = L >= 7 ? ["hourly", "ratio"] : L >= 6 ? ["hourly"] : [];
     // three columns on a wide screen (gauges, history charts, tokens), stacked when there is no room (style.css)
-    $("app").innerHTML = `<div class="dash"><div class="col col-gauges">${CU.views[view](m)}${CU.breakdown(m, breakdownOpen)}</div>`
-      + `<div class="col col-charts">${open(CU.charts(m, ["hourly", "ratio"]))}</div>`
-      + `<div class="col col-tokens">${open(CU.charts(m, ["tokens"]))}</div></div>`;
+    $("app").innerHTML = `<div class="dash"><div class="col col-gauges">${gauges}${L >= 9 ? CU.breakdown(m, breakdownOpen) : ""}</div>`
+      + `<div class="col col-charts">${charts.length ? open(CU.charts(m, charts, Math.min(L, 9))) : ""}</div>`
+      + `<div class="col col-tokens">${L >= 7 ? open(CU.charts(m, ["tokens"], Math.min(L, 9))) : ""}</div></div>`;
     applyNotes();
     CU.fitBars($("app"));
     CU.chartsAfterRender($("app"));
@@ -133,19 +139,19 @@
      The per-panel choices last until the global switch is used again. */
   const noteFlip = {};
   function applyNotes() {
-    document.body.classList.toggle("notes-off", !notesOn);
-    const notesBtn = $("notes");
-    notesBtn.setAttribute("aria-pressed", String(notesOn));
-    document.querySelectorAll("[data-note]").forEach(n => { n.hidden = notesOn === !!noteFlip[n.dataset.note]; });
+    const on = level() === 10;
+    $("notes").setAttribute("aria-pressed", String(on));
+    document.querySelectorAll("[data-note]").forEach(n => { n.hidden = on === !!noteFlip[n.dataset.note]; });
     document.querySelectorAll("[data-note-for]").forEach(b => {
-      b.setAttribute("aria-pressed", String(notesOn !== !!noteFlip[b.dataset.noteFor]));
+      b.setAttribute("aria-pressed", String(on !== !!noteFlip[b.dataset.noteFor]));
     });
   }
+  // "Explanations" = the 10th notch, apart from the slider: from a lower level it jumps to 9 + explanations
   $("notes").addEventListener("click", () => {
-    notesOn = !notesOn;
+    if (baseLevel() < 9) { levelPref = 9; notesOn = true; } else notesOn = !notesOn;
     for (const k in noteFlip) delete noteFlip[k];
-    try { localStorage.setItem(NOTES_KEY, notesOn ? "1" : "0"); } catch (e) { /* ignore */ }
-    applyNotes();
+    try { localStorage.setItem(NOTES_KEY, notesOn ? "1" : "0"); localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
+    showLevel(); render();
   });
   $("app").addEventListener("click", e => {
     const b = e.target.closest && e.target.closest("[data-note-for]");
@@ -153,7 +159,7 @@
     e.preventDefault();                        // the button sits in a <summary>: do not let it fold the panel
     const key = b.dataset.noteFor, d = b.closest("details");
     noteFlip[key] = !noteFlip[key];
-    if (d && !d.open && notesOn !== noteFlip[key]) d.open = true;      // showing the note of a folded panel opens it
+    if (d && !d.open && (level() === 10) !== noteFlip[key]) d.open = true;    // showing the note of a folded panel opens it
     applyNotes();
   });
 
@@ -199,21 +205,51 @@
   });
   showWork();
 
-  /* ---------- view switch (detailed / compact) ---------- */
-  function setView(v) {
-    view = CU.views[v] ? v : "detail";
-    try { localStorage.setItem(VIEW_KEY, view); } catch (e) { /* ignore */ }
-    document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
-    document.body.dataset.view = view;
-    render();
+  /* ---------- compactness level (UI-5): slider 1-9 + "Auto" (from the width of the page, not of the screen) ---------- */
+  // auto: the widest level whose threshold the width reaches (px of the page content)
+  const AUTO = [[0, 1], [200, 2], [260, 3], [330, 4], [400, 5], [520, 6], [640, 7], [760, 8], [880, 9]];
+  let autoLevel = 9;
+  const levelFor = w => AUTO.reduce((lv, [min, l]) => (w >= min ? l : lv), 1);
+  const baseLevel = () => levelPref === "auto" ? autoLevel : levelPref;
+  const level = () => (baseLevel() === 9 && notesOn ? 10 : baseLevel());
+  CU.level = level;
+  const levelInput = $("level");
+  function showLevel() {
+    const b = baseLevel(), L = level();
+    levelInput.value = b;
+    $("level-value").textContent = CU.t("level.value", { n: b });
+    levelInput.setAttribute("aria-valuetext", CU.t("level.value", { n: b }) + (L === 10 ? " + " + CU.t("notes.label") : ""));
+    $("level-auto").setAttribute("aria-pressed", String(levelPref === "auto"));
+    document.body.dataset.level = L;
+    $("hours-box").hidden = L < 9;                     // settings belong to the "everything" level
   }
-  document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+  levelInput.addEventListener("input", () => {
+    levelPref = parseInt(levelInput.value, 10) || 9;
+    try { localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
+    showLevel(); render();
+  });
+  $("level-auto").addEventListener("click", () => {
+    levelPref = "auto";
+    try { localStorage.removeItem(LEVEL_KEY); } catch (e) { /* ignore */ }
+    measure(); showLevel(); render();
+  });
+  function measure() {                               // a small dead band around each threshold: no flicker on a scrollbar
+    const w = document.querySelector(".wrap").clientWidth - 32, next = levelFor(w);
+    if (next === autoLevel) return false;
+    const edge = AUTO.find(([min]) => min > 0 && Math.abs(w - min) < 12);
+    if (edge && Math.abs(next - autoLevel) === 1) return false;
+    autoLevel = next;
+    return true;
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => { if (measure() && levelPref === "auto") { showLevel(); render(); } }).observe(document.querySelector(".wrap"));
+  autoLevel = levelFor(document.querySelector(".wrap").clientWidth - 32);
 
   /* ---------- language switch ---------- */
   const refreshBtn = $("refresh");
   function applyLanguage() {
     CU.applyStatic();
     showHours();
+    showLevel();
     document.querySelectorAll("[data-lang]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === CU.lang)));
     if (!SERVED) refreshBtn.title = CU.t("refresh.disabled");
     render();
@@ -244,7 +280,6 @@
   window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => CU.fitBars($("app")), 100); });
 
   /* ---------- start ---------- */
-  setView(view);
   applyLanguage();
   loadData().then(render);
   setInterval(() => loadData().then(render), 10e3);   // new data (the poller can read every 30 s) and countdowns

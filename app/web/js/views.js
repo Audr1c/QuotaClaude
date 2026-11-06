@@ -105,6 +105,25 @@ window.CU = window.CU || {};
       </section>`;
   }
 
+  /* ---------------- strip (levels 1 to 3): two thin bars in the ring colours ----------------
+     1: the bars only (filled to the % used); 2: + the % written and the pace marker; 3: + when each window resets. */
+  CU.strip = function (m, lvl) {
+    const { five, seven } = m;
+    const row = (w, label, color, ink) => {
+      const pace = lvl >= 2 && w.pace != null ? `<i class="pace" style="left:${Math.min(100, w.pace).toFixed(1)}%;color:${ink}"></i>` : "";
+      const tip = `${label} · ${pct(w.used)}${w.pace != null ? " · " + t("strip.pace", { n: pct(w.pace) }) : ""}`;
+      return `<div class="srow" title="${tip}">
+          ${lvl >= 2 ? `<span class="slabel">${label}</span>` : ""}
+          <span class="sbar"><span class="sfill" style="width:${Math.min(100, w.used).toFixed(1)}%;background:${color}"></span>${pace}</span>
+          ${lvl >= 2 ? `<b style="color:${ink}">${pct(w.used)}</b>` : ""}
+          ${lvl >= 3 ? `<span class="sreset">${resetText(w)}</span>` : ""}
+        </div>`;
+    };
+    return `<section class="card strip lvl${lvl}" role="group" aria-label="${t("gauge.aria.compact")}">
+        ${row(five, t("compact.five"), BLUE, BLUE_INK)}${row(seven, t("compact.seven"), CLAY, CLAY_INK)}
+      </section>`;
+  };
+
   /* ---------------- per-product breakdown (collapsed by default) ---------------- */
   /* One segment per day inside each bar. data-labels = the day name from longest to shortest; CU.fitBars keeps
      the longest one that fits once the bar has its real width. */

@@ -4,7 +4,9 @@
      3. tokens by type (fresh input, cache write, cache read, output) and their relative cost, from the local transcripts.
    Each chart has a range: preset buttons, and (charts 1 and 2) a small overview below it, like a market chart:
    drag the window to move it, drag its edges to zoom, click outside to jump there. The range is kept in
-   localStorage. While a drag is going on, CU.dragging is true and the page does not re-render. */
+   localStorage. While a drag is going on, CU.dragging is true and the page does not re-render.
+   Compactness level (UI-5): below 8 a chart is a small always-open card (no range buttons, no overview, lighter
+   axes); 8 = the full chart; the tokens panel only shows its summary at 7, its tables from 8 and the per-day one at 9. */
 window.CU = window.CU || {};
 
 (function (CU) {
@@ -58,13 +60,15 @@ window.CU = window.CU || {};
     }
     return { bh, bars: out };
   }
-  function hourlyPlot(m, a, b) {
+  function hourlyPlot(m, a, b, s, lvl = 9) {
+    const lite = lvl < 8;
     const { bh, bars } = hourlyBuckets(m, a, b), rate = bh <= 6 ? m.five.paceRate * bh : null;
     const peak = Math.max(...bars.map(d => d.v), rate || 0, 1), step = niceStep(peak * 1.1), max = Math.ceil(peak * 1.1 / step) * step;
-    const y = v => HT - B - (HT - B - T) * v / max, bw = (W - L - R) / bars.length, stride = Math.max(1, Math.ceil(bars.length / 9));
+    const y = v => HT - B - (HT - B - T) * v / max, bw = (W - L - R) / bars.length, stride = Math.max(1, Math.ceil(bars.length / (lite ? 5 : 9)));
     let grid = "";
     for (let v = 0; v <= max + 1e-9; v += step)
-      grid += `<line x1="${L}" x2="${W - R}" y1="${f(y(v))}" y2="${f(y(v))}" stroke="var(--line)"/><text x="${L - 6}" y="${f(y(v) + 4)}" text-anchor="end" class="ax">${Math.round(v * 10) / 10}</text>`;
+      grid += `<line x1="${L}" x2="${W - R}" y1="${f(y(v))}" y2="${f(y(v))}" stroke="var(--line)"/>`
+        + (lite ? "" : `<text x="${L - 6}" y="${f(y(v) + 4)}" text-anchor="end" class="ax">${Math.round(v * 10) / 10}</text>`);
     const body = bars.map((d, i) => {
       const x = L + i * bw, hr = new Date(d.t).getHours(), over = rate != null && d.v > rate;
       const show = bh === 1 || bh >= 24 ? i % stride === 0 : hr === 0;             // 3 h / 6 h bars: label each midnight
@@ -84,18 +88,20 @@ window.CU = window.CU || {};
   /* ---------- 2. ratio over time ---------- */
   const ratioDays = m => m.ratioDaily.map(d => Object.assign({ ms: Date.parse(d.day + "T00:00:00Z") + DAY / 2 }, d));
   const ratioDomain = m => { const d = ratioDays(m); return [d[0].ms - DAY / 2, d[d.length - 1].ms + DAY / 2]; };
-  function ratioPlot(m, a, b) {
+  function ratioPlot(m, a, b, s, lvl = 9) {
+    const lite = lvl < 8;
     const days = ratioDays(m).filter(d => d.ms >= a && d.ms <= b);
     const vals = days.flatMap(d => [d.ratio, d.cum]).filter(v => v != null).concat(m.ratio);
     const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1), step = niceStep(hi - lo);
     const y = v => HT - B - (HT - B - T) * (v - lo) / (hi - lo), x = ms => L + (W - L - R) * (ms - a) / (b - a);
     let grid = "";
     for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step)
-      grid += `<line x1="${L}" x2="${W - R}" y1="${f(y(v))}" y2="${f(y(v))}" stroke="var(--line)"/><text x="${L - 6}" y="${f(y(v) + 4)}" text-anchor="end" class="ax">${Math.round(v * 10) / 10}</text>`;
+      grid += `<line x1="${L}" x2="${W - R}" y1="${f(y(v))}" y2="${f(y(v))}" stroke="var(--line)"/>`
+        + (lite ? "" : `<text x="${L - 6}" y="${f(y(v) + 4)}" text-anchor="end" class="ax">${Math.round(v * 10) / 10}</text>`);
     const path = days.filter(d => d.cum != null).map((d, i) => (i ? "L" : "M") + f(x(d.ms)) + " " + f(y(d.cum))).join(" ");
     const dots = days.map(d => d.ratio == null ? "" :
       `<circle cx="${f(x(d.ms))}" cy="${f(y(d.ratio))}" r="3.5" fill="var(--blue)"><title>${d.day} · ${CU.fmt.pct(d.ratio, 1)} (${t("chart.ratio.tip", { a: CU.fmt.num(d.d5), b: CU.fmt.num(d.d7) })})</title></circle>`).join("");
-    const stride = Math.max(1, Math.ceil(days.length / 8));
+    const stride = Math.max(1, Math.ceil(days.length / (lite ? 4 : 8)));
     const xl = days.map((d, i) => i % stride ? "" : `<text x="${f(x(d.ms))}" y="${HT - 8}" text-anchor="middle" class="ax">${dm(d.ms)}</text>`).join("");
     const cur = `<line x1="${L}" x2="${W - R}" y1="${f(y(m.ratio))}" y2="${f(y(m.ratio))}" stroke="var(--clay-ink)" stroke-width="1" stroke-dasharray="2 4"/>`;
     return { svg: grid + cur + (path ? `<path d="${path}" fill="none" stroke="var(--clay)" stroke-width="2.5" stroke-linejoin="round"/>` : "") + dots + xl };
@@ -127,7 +133,7 @@ window.CU = window.CU || {};
   const stack = (types, key, tot, label) => `<div class="share">${types.map(x => x[key] > 0 ?
     `<span style="flex-grow:${x[key]};background:${x.color}" title="${t("chart.tokens.t." + x.id)} · ${pc(x[key], tot)} ${label}"></span>` : "").join("")}</div>`;
 
-  function tokensPlot(m, a, b, span) {
+  function tokensPlot(m, a, b, span, lvl = 9) {
     const cut = span ? new Date(Date.now() - (span / DAY - 1) * DAY).toISOString().slice(0, 10) : "";
     const days = m.tokens.days.filter(d => d.day >= cut).reverse();
     const tot = { input: 0, output: 0, cache_read: 0, cache_write: 0, cache_write_1h: 0 };
@@ -145,16 +151,20 @@ window.CU = window.CU || {};
       return `<tr><th>${dm(Date.parse(d.day + "T12:00:00Z"))}</th><td><span class="tbar">${bar}</span></td><td>${k(n)}</td>`
         + `<td>${pc(d.cache_read, n)}</td><td>${k(c)}</td><td>${d.d7 ? CU.fmt.pct(d.d7, 0) : "—"}</td><td>${d.d7 ? k(c / d.d7) : "—"}</td></tr>`;
     }).join("");
-    return { svg: `
+    const statsHtml = `
         <div class="stats">
           <div><b>${k(all)}</b><span>${t("chart.tokens.s.total")}</span></div>
           <div><b>${pc(tot.cache_read, all)}</b><span>${t("chart.tokens.s.cached", { n: k(tot.cache_read) })}</span></div>
           <div><b>${saving == null ? "—" : "−" + CU.fmt.pct(saving, 0)}</b><span>${t("chart.tokens.s.saving")}</span></div>
-        </div>
+        </div>`;
+    if (lvl < 8) return { svg: statsHtml };
+    const tables = `
         <h3 class="sub">${t("chart.tokens.h.tokens")}</h3>${stack(types, "n", all, t("chart.tokens.oftokens"))}
         <h3 class="sub">${t("chart.tokens.h.cost")}</h3>${stack(types, "cost", cost, t("chart.tokens.ofcost"))}
         <table class="eqs tokens types"><tr><th></th><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.pctt")}</td><td>${t("chart.tokens.c.price")}</td><td>${t("chart.tokens.c.pctc")}</td></tr>${rows}</table>
-        <p class="note" data-note="tokens">${t("chart.tokens.hitnote")}</p>
+        <p class="note" data-note="tokens">${t("chart.tokens.hitnote")}</p>`;
+    if (lvl < 9) return { svg: statsHtml + tables };
+    return { svg: statsHtml + tables + `
         <h3 class="sub">${t("chart.tokens.byday")}</h3>
         <div class="hscroll"><table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.cache")}</td><td>${t("chart.tokens.c.cost")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.costpct")}</td></tr>${drows}</table></div>` };
   }
@@ -183,15 +193,15 @@ window.CU = window.CU || {};
       key: "tokens", span: 7 * DAY, minSpan: DAY, presets: [P("7d", 7 * DAY), P("14d", 14 * DAY), P("30d", 30 * DAY), P("all", 0)],
       ready: m => m.tokens && m.tokens.days.length, noMini: true, title: "chart.tokens.title",
       domain: () => { const hi = Date.now(); return [hi - DAY, hi]; },
-      plot: (m, a, b, s) => tokensPlot(m, a, b, s.span),
+      plot: (m, a, b, s, lvl) => tokensPlot(m, a, b, s.span, lvl),
       label: () => "", hint: m => { const w = m.tokens.week, all = w.input + w.output + w.cache_read + w.cache_write;
         return t("chart.tokens.hit", { n: pc(w.cache_read, all) }); }, note: () => t("chart.tokens.note"), legend: () => "",
     },
   };
 
   /* what a chart shows for the current range */
-  function parts(def, m) {
-    const s = state(def), [lo, hi] = def.domain(m), [a, b] = win(s, lo, hi, def.minSpan), r = def.plot(m, a, b, s);
+  function parts(def, m, lvl = 9) {
+    const s = state(def), [lo, hi] = def.domain(m), [a, b] = win(s, lo, hi, def.minSpan), r = def.plot(m, a, b, s, lvl);
     return { s, lo, hi, a, b, r, label: def.label(r, a, b) };
   }
   const pressed = (def, p, span, lo, hi, a, b) => def.key === "tokens" ? p === span : (p ? Math.abs((b - a) - Math.min(p, hi - lo)) < 1000 : b - a >= hi - lo - 1000);
@@ -216,8 +226,18 @@ window.CU = window.CU || {};
     set("hr", { x: f(xb - 3) });
   }
 
-  function card(def, m) {
-    const p = parts(def, m);
+  const qbtn = key => `<button type="button" class="qbtn" data-note-for="${key}" aria-label="${t("notes.one")}" title="${t("notes.one")}">?</button>`;
+  function card(def, m, lvl) {
+    const p = parts(def, m, lvl);
+    if (lvl < 8) {                                                      // small version: always open, no range controls
+      const plot = def.key === "tokens" ? `<div class="plot">${p.r.svg}</div>` : `<svg class="plot" viewBox="0 0 ${W} ${HT}" role="img" aria-label="${t(def.title)}">${p.r.svg}</svg>`;
+      return `
+      <section class="card chart lite" data-key="${def.key}" data-level="${lvl}">
+        <div class="card-head"><h2>${t(def.title)}</h2><span class="hint">${def.hint(m, p.r)}</span>${qbtn(def.key)}</div>
+        ${plot}${def.key === "tokens" ? "" : def.legend()}
+        <p class="note" data-note="${def.key}">${def.note(m)}</p>
+      </section>`;
+    }
     const buttons = def.presets.map(([key, ms]) =>
       `<button type="button" data-span="${ms}" aria-pressed="${pressed(def, ms, p.s.span, p.lo, p.hi, p.a, p.b)}">${t("range." + key)}</button>`).join("");
     const mini = def.noMini ? "" : `
@@ -227,8 +247,8 @@ window.CU = window.CU || {};
           <rect class="win" y="0.5" height="${MH - 1}" rx="3"/><rect class="hdl hl" y="${MH / 2 - 10}" width="6" height="20" rx="2"/><rect class="hdl hr" y="${MH / 2 - 10}" width="6" height="20" rx="2"/>
         </svg>`;
     const html = `
-      <details class="card chart" data-key="${def.key}">
-        <summary><h2>${t(def.title)}</h2><span class="hint">${def.hint(m, p.r)}</span><button type="button" class="qbtn" data-note-for="${def.key}" aria-label="${t("notes.one")}" title="${t("notes.one")}">?</button></summary>
+      <details class="card chart" data-key="${def.key}" data-level="${lvl}">
+        <summary><h2>${t(def.title)}</h2><span class="hint">${def.hint(m, p.r)}</span>${qbtn(def.key)}</summary>
         <div class="presets seg" role="group" aria-label="${t(def.title)}">${buttons}</div>
         ${def.key === "tokens" ? `<div class="plot">${p.r.svg}</div>` : `<svg class="plot" viewBox="0 0 ${W} ${HT}" role="img" aria-label="${t(def.title)}">${p.r.svg}</svg>`}
         ${mini}
@@ -243,10 +263,10 @@ window.CU = window.CU || {};
   function refresh(el) {
     const def = DEFS[el.dataset.key], m = CU.lastModel;
     if (!def || !m) return;
-    const p = parts(def, m), plot = el.querySelector(".plot");
+    const p = parts(def, m, +el.dataset.level || 9), plot = el.querySelector(".plot");
     plot.innerHTML = p.r.svg;
     const rl = el.querySelector(".rlabel");
-    if (rl.firstChild && rl.firstChild.nodeType === 3) rl.firstChild.textContent = p.label + " ";
+    if (rl && rl.firstChild && rl.firstChild.nodeType === 3) rl.firstChild.textContent = p.label + " ";
     el.querySelector("summary .hint").innerHTML = def.hint(m, p.r);
     el.querySelectorAll(".presets button").forEach(b => b.setAttribute("aria-pressed", String(pressed(def, +b.dataset.span, p.s.span, p.lo, p.hi, p.a, p.b))));
     const svg = el.querySelector("svg.mini");
@@ -257,16 +277,16 @@ window.CU = window.CU || {};
     svg.setAttribute("aria-valuetext", p.label);
   }
 
-  CU.charts = function (m, keys) {                                      // keys: which charts (default: all of them)
+  CU.charts = function (m, keys, lvl = 9) {                             // keys: which charts (default: all); lvl: compactness level
     CU.lastModel = m;
-    return Object.values(DEFS).filter(d => (!keys || keys.includes(d.key)) && d.ready(m)).map(d => card(d, m)).join("");
+    return Object.values(DEFS).filter(d => (!keys || keys.includes(d.key)) && d.ready(m)).map(d => card(d, m, lvl)).join("");
   };
   CU.charts.internals = { hourlyBuckets, bucketHours };                 // for the tests (test_audit.py)
   CU.chartsAfterRender = function (root) {                              // window rectangles need the overview to exist
     const m = CU.lastModel;
     root.querySelectorAll(".chart").forEach(el => {
       const def = DEFS[el.dataset.key], svg = el.querySelector("svg.mini");
-      if (def && svg && m) { const p = parts(def, m); place(svg, p.lo, p.hi, p.a, p.b); aria(svg, p); }
+      if (def && svg && m) { const p = parts(def, m, +el.dataset.level || 9); place(svg, p.lo, p.hi, p.a, p.b); aria(svg, p); }
     });
   };
 

@@ -40,7 +40,7 @@ Ce qui était vérifié et correct dès la 1.1.0 : écoute sur `127.0.0.1` seule
 | 2 | ✅ `UI-1` | Textes d'aide : raccourcir, supprimer les doublons, pouvoir les masquer (fait) | S à M | — |
 | 3 | ✅ `UI-4` | Graduations de temps sur les deux cadrans (fait) | M | `UI-3` (pour la semaine) |
 | 4 | ✅ `UI-2` | Page qui utilise la largeur, compatible tactile, vue compacte lisible (fait) | M à L | `UI-1` |
-| 5 | `UI-5` | Curseur de compacité (une dizaine de crans) et niveau choisi selon la largeur | L | `UI-1`, `UI-2` |
+| 5 | ✅ `UI-5` | Curseur de compacité (une dizaine de crans) et niveau choisi selon la largeur (fait) | L | `UI-1`, `UI-2` |
 | 6 | `ONB-1` | Assistant de première utilisation et menu plus clair | M | — |
 | 7 | `ACC-1` | Lancer et ouvrir le widget sans terminal | M | `ONB-1` |
 | 8 | `API-1`, `API-2` | Socle commun : stockage unique, API de lecture versionnée, réglages côté serveur | M à L | — |
