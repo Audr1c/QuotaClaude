@@ -160,6 +160,15 @@ class ServerHardeningTests(unittest.TestCase):
         status, r = self.request("GET", "/web/js/app.js")
         self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
 
+    def test_easy_address_and_installable_app(self):
+        ok = self.request("GET", "/web/index.html", {"Host": f"claude.localhost:{self.port}"})[0]
+        self.assertEqual(ok, 200)
+        for host in (f"evil.localhost:{self.port}", f"claude.localhost.evil.example:{self.port}", "claude.localhost"):
+            self.assertEqual(self.request("GET", "/web/index.html", {"Host": host})[0], 403, host)
+        status, r = self.request("GET", "/web/manifest.webmanifest")
+        self.assertEqual((status, r.getheader("Content-Type")), (200, "application/manifest+json"))
+        self.assertEqual(self.request("GET", "/web/sw.js")[1].getheader("Content-Type"), "text/javascript; charset=utf-8")
+
     def test_the_page_has_no_inline_script(self):
         html = (self.server.WEB / "index.html").read_text(encoding="utf-8")
         self.assertNotIn("<script>", html)

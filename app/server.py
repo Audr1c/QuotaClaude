@@ -9,7 +9,7 @@ Local server for the widget (Windows, Linux, macOS; standard library only).
     python server.py --open --lang fr   -> opens the widget in French (fr or en)
 
 Routes:
-    GET  /                   -> redirects to /web/index.html
+    GET  /                   -> redirects to /web/index.html   (also at http://claude.localhost:8765/)
     GET  /web/...            -> widget files
     GET  /data/latest.json   -> latest state (also latest.js)
     GET  /data/poller.json   -> state of the adaptive poller (when the next reading is due)
@@ -74,6 +74,7 @@ TYPES = {
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".ico": "image/x-icon",
+    ".webmanifest": "application/manifest+json",
 }
 
 
@@ -108,9 +109,10 @@ class Handler(BaseHTTPRequestHandler):
     def _host_ok(self) -> bool:
         """Anti DNS-rebinding: only the local address is accepted in the Host header.
         Without this, a remote page could point its domain name at 127.0.0.1
-        and query this server from the browser."""
+        and query this server from the browser. claude.localhost is an easier address to remember: browsers
+        resolve every *.localhost name to this machine without asking any DNS server."""
         port = self.server.server_address[1]
-        return (self.headers.get("Host") or "").lower() in (f"127.0.0.1:{port}", f"localhost:{port}")
+        return (self.headers.get("Host") or "").lower() in (f"127.0.0.1:{port}", f"localhost:{port}", f"claude.localhost:{port}")
 
     def _fetch_ok(self) -> bool:
         """Browsers say where a request comes from (Sec-Fetch-Site). A page of another site, or of another port on this

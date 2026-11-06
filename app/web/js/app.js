@@ -279,6 +279,9 @@
   let resizeTimer = null;                          // day names in the breakdown bars depend on their width
   window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => CU.fitBars($("app")), 100); });
 
+  /* ---------- installable app (ACC-1): a service worker, only when served (127.0.0.1 counts as a secure origin) ---------- */
+  if (SERVED && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { /* not essential */ });
+
   /* ---------- start ---------- */
   applyLanguage();
   loadData().then(render);

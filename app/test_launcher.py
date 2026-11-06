@@ -108,7 +108,9 @@ class WizardTests(unittest.TestCase):
                         mock.patch.object(app, "token_problem", lambda: None),
                         mock.patch.object(app, "read_now", lambda ui: self.calls.append("read") or True),
                         mock.patch.object(app, "open_widget", lambda ui, browser=True: self.calls.append("open") or True),
-                        mock.patch.object(app, "install_task", lambda ui, s: self.calls.append(("install", s)) or True)]
+                        mock.patch.object(app, "install_task", lambda ui, s: self.calls.append(("install", s)) or True),
+                        mock.patch.object(app, "shortcut_paths", lambda: [d / "never-written.desktop"]),
+                        mock.patch.object(app, "make_shortcut", lambda ui, remove=False: self.calls.append("shortcut") or True)]
         for p in self.patches:
             p.start()
 
@@ -124,14 +126,14 @@ class WizardTests(unittest.TestCase):
 
     def test_yes_takes_the_recommended_answers(self):
         out = self.run_quiet(None)
-        self.assertEqual(self.calls, ["read", ("install", True)])      # --yes does not open a browser
+        self.assertEqual(self.calls, ["read", ("install", True), "shortcut"])      # --yes does not open a browser
         self.assertTrue(app.load_config().get("setup_done"))
         self.assertIn("run.py uninstall", out)
 
     def test_replay_does_not_install_again(self):
         app.save_config({"server_at_login": True})
         out = self.run_quiet("systemd")
-        self.assertEqual(self.calls, ["read"])
+        self.assertEqual(self.calls, ["read", "shortcut"])
         self.assertIn("already set up", out)
 
     def test_missing_token_skips_the_reading(self):
@@ -140,6 +142,24 @@ class WizardTests(unittest.TestCase):
             out = self.run_quiet(None)
         self.assertNotIn("read", self.calls)
         self.assertIn("/login", out)
+
+
+class ShortcutTests(unittest.TestCase):
+    def test_desktop_entry_opens_the_widget_and_quotes_paths(self):
+        text = app.desktop_entry('/opt/my "py"/python3')
+        self.assertIn('Exec="/opt/my \\"py\\"/python3" ', text)
+        self.assertIn('run.py" open', text)
+        self.assertIn("Terminal=false", text)
+
+    def test_linux_shortcut_is_written_and_removed(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(app, "IS_LINUX", True), \
+                mock.patch.object(app, "IS_WINDOWS", False), mock.patch.object(app, "shortcut_paths", lambda: [Path(d) / "a" / "x.desktop"]), \
+                mock.patch("sys.stdout", io.StringIO()):
+            self.assertTrue(app.make_shortcut(app.Ui("en")))
+            f = Path(d) / "a" / "x.desktop"
+            self.assertTrue(f.is_file() and os.access(f, os.X_OK))
+            self.assertTrue(app.make_shortcut(app.Ui("en"), remove=True))
+            self.assertFalse(f.exists())
 
 
 class LauncherLogicTests(unittest.TestCase):
@@ -216,6 +236,7 @@ class MenuSmokeTest(unittest.TestCase):
             ("Français", "\r"),                            # Enter: choose it
             ("Vérifier à nouveau", "2"),                   # no Claude Code token here: go on without it
             ("Faire les relevés automatiquement", "2"),    # do not install anything from a test
+            ("Ajouter un raccourci", "2"),
             ("Ouvrir le widget maintenant", "2"),
             ("Appuie sur Entrée pour aller au menu", "\r"),
             ("Que veux-tu faire", "3"),                    # direct jump to "État" (group "Voir")

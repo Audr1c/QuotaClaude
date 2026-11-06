@@ -291,6 +291,91 @@ def remove_task(ui: Ui) -> bool:
     return True
 
 
+SHORTCUT_NAME = "Claude Usage"                      # the shortcut that opens the widget directly (no menu)
+DESKTOP_FILE = "claude-usage-widget.desktop"
+
+
+def xdg_desktop_dir() -> Path | None:
+    """The user's desktop folder on Linux (XDG_DESKTOP_DIR from user-dirs.dirs, else ~/Desktop), if it exists."""
+    home = Path.home()
+    try:
+        for line in (home / ".config" / "user-dirs.dirs").read_text(encoding="utf-8").splitlines():
+            if line.startswith("XDG_DESKTOP_DIR="):
+                d = Path(line.split("=", 1)[1].strip().strip('"').replace("$HOME", str(home)))
+                if d.is_dir():
+                    return d
+    except OSError:
+        pass
+    d = home / "Desktop"
+    return d if d.is_dir() else None
+
+
+def shortcut_paths() -> list[Path]:
+    """Where the shortcuts go: applications menu (+ desktop) on Linux, Start menu + desktop on Windows."""
+    if IS_WINDOWS:
+        appdata, profile = os.environ.get("APPDATA"), os.environ.get("USERPROFILE")
+        out = []
+        if appdata:
+            out.append(Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / f"{SHORTCUT_NAME}.lnk")
+        if profile and (Path(profile) / "Desktop").is_dir():
+            out.append(Path(profile) / "Desktop" / f"{SHORTCUT_NAME}.lnk")
+        return out
+    out = [Path.home() / ".local" / "share" / "applications" / DESKTOP_FILE]
+    desk = xdg_desktop_dir()
+    if desk:
+        out.append(desk / DESKTOP_FILE)
+    return out
+
+
+def desktop_entry(python: str) -> str:
+    def q(x: str) -> str:                                # Exec quoting of the Desktop Entry spec
+        return '"' + x.replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`").replace("$", "\\$") + '"'
+    return ("[Desktop Entry]\nType=Application\n"
+            f"Name={SHORTCUT_NAME}\nComment=Open the Claude usage widget (5-hour and weekly quota)\n"
+            f"Exec={q(python)} {q(str(ROOT / 'run.py'))} open\nPath={ROOT}\n"
+            f"Icon={ROOT / 'assets' / 'icon-256.png'}\nTerminal=false\nCategories=Utility;\n")
+
+
+def make_shortcut(ui: Ui, remove: bool = False) -> bool:
+    """A double-click that starts the server if needed and opens the widget, without the menu (ACC-1)."""
+    if not (IS_WINDOWS or IS_LINUX):
+        ui.say("shortcut.unsupported")
+        return False
+    paths = shortcut_paths()
+    if remove:
+        for path in paths:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        ui.say("shortcut.removed")
+        return True
+    try:
+        if IS_WINDOWS:
+            # paths go through environment variables, never into the PowerShell source
+            script = ("$s = New-Object -ComObject WScript.Shell; foreach ($p in $env:CU_LINKS.Split('|')) { "
+                      "$l = $s.CreateShortcut($p); $l.TargetPath = $env:CU_TARGET; $l.Arguments = $env:CU_ARGS; "
+                      "$l.WorkingDirectory = $env:CU_DIR; $l.IconLocation = $env:CU_ICON; $l.Description = 'Claude usage widget'; $l.Save() }")
+            env = dict(os.environ, CU_LINKS="|".join(str(p) for p in paths), CU_TARGET=background_python(),
+                       CU_ARGS=f'"{ROOT / "run.py"}" open', CU_DIR=str(ROOT), CU_ICON=str(ROOT / "assets" / "icon.ico"))
+            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                               env=env, capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                print(ui.t("shortcut.fail", msg=(r.stderr or r.stdout).strip()[:300]))
+                return False
+        else:
+            text = desktop_entry(sys.executable)
+            for path in paths:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                path.chmod(0o755)                         # desktops only launch executable .desktop files
+    except (OSError, subprocess.SubprocessError) as e:
+        print(ui.t("shortcut.fail", msg=str(e)))
+        return False
+    print(ui.t("shortcut.ok", where=", ".join(str(p) for p in paths)))
+    return True
+
+
 def run_tests(ui: Ui) -> bool:
     ui.say("tests.running")
     code = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", str(ROOT), "-p", "test_*.py"],
@@ -518,6 +603,14 @@ def setup_wizard(ui: Ui, yes: bool = False, ask_language: bool = True) -> Ui:
         print()
         ui.say("install.unsupported")
 
+    # 5b. a shortcut that opens the widget in one double-click
+    if (IS_WINDOWS or IS_LINUX) and w.ask(ui.t("setup.shortcut.q"), ui.t("setup.shortcut.explain")):
+        if any(p.exists() for p in shortcut_paths()):
+            print(ui.t("setup.shortcut.already"))
+            done.append(ui.t("setup.done.shortcut"))
+        elif make_shortcut(ui):
+            done.append(ui.t("setup.done.shortcut"))
+
     # 6. open the widget now
     if w.ask(ui.t("setup.open.q"), ui.t("setup.open.explain"), default=not yes):
         if open_widget(ui):
@@ -560,6 +653,8 @@ def build_parser() -> argparse.ArgumentParser:
     inst = sub.add_parser("install", help="set up automatic readings in the background (adaptive timing, 30 s to 10 min)")
     inst.add_argument("--with-server", action="store_true", help="also start the widget server at login")
     sub.add_parser("uninstall", help="remove automatic readings (your data is kept)")
+    sc = sub.add_parser("shortcut", help="create a desktop / menu shortcut that opens the widget directly")
+    sc.add_argument("--remove", action="store_true", help="remove that shortcut")
     return p
 
 
@@ -608,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if install_task(ui, args.with_server) else 1
         if args.cmd == "uninstall":
             return 0 if remove_task(ui) else 1
+        if args.cmd == "shortcut":
+            return 0 if make_shortcut(ui, remove=args.remove) else 1
     except KeyboardInterrupt:
         print()
         return 130

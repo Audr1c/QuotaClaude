@@ -164,6 +164,14 @@ EN = {
     "setup.undo": "Remove everything: run.py uninstall (or menu › Automatic readings › Remove), then delete the folder.",
     "setup.again": "Run this setup again: menu › Quick setup, or run.py --setup.",
     "setup.continue": "Press Enter to go to the menu…",
+    "shortcut.ok": "Shortcut created: {where}",
+    "shortcut.removed": "Shortcut removed.",
+    "shortcut.fail": "Could not create the shortcut: {msg}",
+    "shortcut.unsupported": "Shortcuts are only supported on Windows and Linux.",
+    "setup.shortcut.q": "Add a “Claude Usage” shortcut that opens the widget directly?",
+    "setup.shortcut.explain": "One double-click (desktop, Start menu or applications menu) starts the server if needed and opens the widget, without this menu. To remove it: run.py shortcut --remove.",
+    "setup.shortcut.already": "The shortcut is already there.",
+    "setup.done.shortcut": "“Claude Usage” shortcut (opens the widget directly)",
     "weekdays": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
 }
 
@@ -322,6 +330,14 @@ FR = {
     "setup.undo": "Tout enlever : run.py uninstall (ou menu › Relevés automatiques › Supprimer), puis supprimer le dossier.",
     "setup.again": "Relancer cette configuration : menu › Configuration rapide, ou run.py --setup.",
     "setup.continue": "Appuie sur Entrée pour aller au menu…",
+    "shortcut.ok": "Raccourci créé : {where}",
+    "shortcut.removed": "Raccourci supprimé.",
+    "shortcut.fail": "Impossible de créer le raccourci : {msg}",
+    "shortcut.unsupported": "Les raccourcis ne sont gérés que sous Windows et Linux.",
+    "setup.shortcut.q": "Ajouter un raccourci « Claude Usage » qui ouvre directement le widget ?",
+    "setup.shortcut.explain": "Un double-clic (Bureau, menu Démarrer ou menu des applications) lance le serveur si besoin et ouvre le widget, sans passer par ce menu. Pour l'enlever : run.py shortcut --remove.",
+    "setup.shortcut.already": "Le raccourci est déjà là.",
+    "setup.done.shortcut": "raccourci « Claude Usage » (ouvre directement le widget)",
     "weekdays": "lun.,mar.,mer.,jeu.,ven.,sam.,dim.",
 }
 
