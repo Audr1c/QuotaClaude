@@ -136,8 +136,7 @@ window.CU = window.CU || {};
     const types = tokenTypes(tot), all = sum(types, x => x.n), cost = sum(types, x => x.cost);
     const noCache = (tot.input + tot.cache_read + tot.cache_write) * PRICE.input + tot.output * PRICE.output;
     const saving = noCache > 0 ? 100 * (1 - cost / noCache) : null;
-    const prompt = tot.input + tot.cache_read + tot.cache_write;
-    const rows = types.map(x => `<tr><th><span class="dot" style="color:${x.color}"></span>${t("chart.tokens.t." + x.id)}<small>${t("chart.tokens.d." + x.id)}</small></th>`
+        const rows = types.map(x => `<tr><th><span class="dot" style="color:${x.color}"></span>${t("chart.tokens.t." + x.id)}<small>${t("chart.tokens.d." + x.id)}</small></th>`
       + `<td>${k(x.n)}</td><td>${pc(x.n, all)}</td><td>${x.n > 0 ? times(x.cost / x.n) : "—"}</td><td><b>${pc(x.cost, cost)}</b></td></tr>`).join("");
     const maxCost = Math.max(...days.map(d => sum(tokenTypes(d), x => x.cost)), 1);
     const drows = days.map(d => {
@@ -155,7 +154,7 @@ window.CU = window.CU || {};
         <h3 class="sub">${t("chart.tokens.h.tokens")}</h3>${stack(types, "n", all, t("chart.tokens.oftokens"))}
         <h3 class="sub">${t("chart.tokens.h.cost")}</h3>${stack(types, "cost", cost, t("chart.tokens.ofcost"))}
         <table class="eqs tokens types"><tr><th></th><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.pctt")}</td><td>${t("chart.tokens.c.price")}</td><td>${t("chart.tokens.c.pctc")}</td></tr>${rows}</table>
-        <p class="note">${t("chart.tokens.hitnote", { hit: CU.fmt.pct(prompt ? 100 * tot.cache_read / prompt : 0, 0), prompt: k(prompt), cached: k(tot.cache_read) })}</p>
+        <p class="note" data-note="tokens">${t("chart.tokens.hitnote")}</p>
         <h3 class="sub">${t("chart.tokens.byday")}</h3>
         <table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.cache")}</td><td>${t("chart.tokens.c.cost")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.costpct")}</td></tr>${drows}</table>` };
   }
@@ -229,13 +228,13 @@ window.CU = window.CU || {};
         </svg>`;
     const html = `
       <details class="card chart" data-key="${def.key}">
-        <summary><h2>${t(def.title)}</h2><span class="hint">${def.hint(m, p.r)}</span></summary>
+        <summary><h2>${t(def.title)}</h2><span class="hint">${def.hint(m, p.r)}</span><button type="button" class="qbtn" data-note-for="${def.key}" aria-label="${t("notes.one")}" title="${t("notes.one")}">?</button></summary>
         <div class="presets seg" role="group" aria-label="${t(def.title)}">${buttons}</div>
         ${def.key === "tokens" ? `<div class="plot">${p.r.svg}</div>` : `<svg class="plot" viewBox="0 0 ${W} ${HT}" role="img" aria-label="${t(def.title)}">${p.r.svg}</svg>`}
         ${mini}
-        <p class="rlabel">${p.label}${def.noMini ? "" : ` <span>${t("chart.range.hint")}</span>`}</p>
+        <p class="rlabel">${p.label}${def.noMini ? "" : ` <span class="note" data-note="${def.key}">${t("chart.range.hint")}</span>`}</p>
         ${def.legend()}
-        <p class="note">${def.note(m)}</p>
+        <p class="note" data-note="${def.key}">${def.note(m)}</p>
       </details>`;
     return html;
   }

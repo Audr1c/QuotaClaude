@@ -145,8 +145,34 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 .bars .q { grid-column: 2 / 4; color: var(--muted); font-size: 12px; margin-top: -4px; }
 .breakdown .note { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
 
+/* ---------- explanations (UI-1): global switch, "?" per panel, floating "how it is computed" panel ---------- */
+.btn.toggle[aria-pressed="false"] { color: var(--muted); }
+.btn.toggle[aria-pressed="true"] { border-color: var(--clay); }
+.qbtn-big { padding: 6px 11px; font-weight: 600; }
+.qbtn {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); background: transparent;
+  color: var(--muted); font: 600 12px/1 inherit; cursor: pointer; padding: 0; position: relative;
+}
+.qbtn::before { content: ""; position: absolute; inset: -11px; }             /* 44 px touch target around a small icon */
+.qbtn[aria-pressed="true"] { color: var(--clay-ink); border-color: var(--clay); }
+.qbtn:hover { background: var(--hover); }
+.note[hidden] { display: none !important; }
+.gauges-note { margin: 10px 4px 0; color: var(--muted); font-size: 12px; }
+.compact .gauges-note { margin: 10px 0 0; text-align: center; }
+/* the header of a folded panel sums it up; once open, the same figure is in the panel itself */
+.chart[open] > summary .hint { display: none; }
+.chart[open] > summary .qbtn { margin-left: auto; }
+dialog.how {
+  position: fixed; inset: 0 0 0 auto; margin: 0; height: 100%; max-height: 100%; width: min(620px, 100%);
+  border: 0; border-left: 1px solid var(--line); padding: 0 22px 22px; background: var(--card); color: var(--text); overflow-y: auto;
+}
+dialog.how::backdrop { background: rgba(20, 20, 19, .35); }
+.how-head { position: sticky; top: 0; background: var(--card); display: flex; align-items: center; gap: 10px; padding: 18px 0 10px; border-bottom: 1px solid var(--line); z-index: 1; }
+.how-head h2 { flex: 1; }
+.how-head .hint { color: var(--muted); font-size: 12px; }
+.how .lead { color: var(--muted); font-size: 13px; margin: 12px 0 4px; }
+
 /* ---------- misc ---------- */
-.foot { margin-top: 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .err { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--clay); color: var(--clay-ink); font-size: 13px; }
 .err details { margin-top: 6px; }
 .err summary { cursor: pointer; font-weight: 600; }
@@ -163,13 +189,6 @@ svg.gauge { width: 100%; max-width: 330px; display: block; margin: 4px auto 0; }
 
 
 /* ---------- "how it is computed" panel ---------- */
-.formulas { margin-top: 16px; }
-.formulas summary { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; list-style: none; }
-.formulas summary::-webkit-details-marker { display: none; }
-.formulas summary::before { content: "›"; display: inline-block; margin-right: 8px; transition: transform .15s; color: var(--muted); }
-.formulas[open] summary::before { transform: rotate(90deg); }
-.formulas summary h2 { flex: 1; }
-.formulas .hint { color: var(--muted); font-size: 12px; }
 .eqs { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
 .eqs th, .eqs td { text-align: left; vertical-align: top; padding: 8px 0; border-top: 1px solid var(--line); }
 .eqs th { width: 38%; font-weight: 500; padding-right: 12px; }

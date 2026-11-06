@@ -60,7 +60,7 @@ window.CU = window.CU || {};
         </ul>
       </section>`;
 
-    return `<div class="grid">${card5}${card7}</div>`;
+    return `<div class="grid">${card5}${card7}</div><p class="note gauges-note" data-note="gauges">${t("gauges.note")}</p>`;
   }
 
   /* ---------------- compact view: one block, two concentric rings ---------------- */
@@ -95,6 +95,7 @@ window.CU = window.CU || {};
           ${li("tri", CLAY_INK, t("compact.legend.limit5"), pct(five.weekPace))}
           ${li("tri", CLAY_INK, t("compact.legend.pace7"), pct(seven.pace))}
         </ul>
+        <p class="note gauges-note" data-note="gauges">${t("gauges.note")}</p>
         <div class="stats">
           <div><b>${pct(five.paceRate, 1)}</b><span>${t("stat.rate")}</span></div>
           <div><b>${pct(seven.ratePerDay, 1)}</b><span>${t("stat.day")}</span></div>
@@ -140,7 +141,7 @@ window.CU = window.CU || {};
     const count = rows.length === 1 ? t("breakdown.count.one") : t("breakdown.count", { n: rows.length });
     return `
       <details class="card breakdown"${open ? " open" : ""}>
-        <summary><h2>${t("breakdown.title")}</h2><span class="hint">${count}</span></summary>
+        <summary><h2>${t("breakdown.title")}</h2><span class="hint">${count}</span><button type="button" class="qbtn" data-note-for="breakdown" aria-label="${t("notes.one")}" title="${t("notes.one")}">?</button></summary>
         <ul class="bars">
           ${rows.map(r => `
             <li>
@@ -150,13 +151,13 @@ window.CU = window.CU || {};
               <span class="q">${t("breakdown.quota", { n: num(r.quota) })}</span>
             </li>`).join("")}
         </ul>
-        <p class="note">${t("breakdown.note", { pct: pct(m.seven.used) })} ${t("breakdown.days")}</p>
+        <p class="note" data-note="breakdown">${t("breakdown.note", { pct: pct(m.seven.used) })} ${t("breakdown.days")}</p>
       </details>`;
   };
 
   /* ---------------- "how it is computed" panel: every equation, with your current numbers ---------------- */
   const hhmm = ms => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  CU.formulas = function (m, open) {
+  CU.formulas = function (m) {
     const { five, seven } = m, H = 3600e3, dash = "—";
     const hl5 = five.left / H, dl7 = seven.left / (24 * H);
     const p1 = v => v == null ? dash : pct(v, 1), n2 = v => v == null ? dash : num(v, 2);
@@ -166,7 +167,7 @@ window.CU = window.CU || {};
       ["pace5", "", `(5 h − ${n2(hl5)} h) / 5 h`, p1(five.pace)],
       w && ["start", "", "", seven.work && seven.work.startToday ? hhmm(seven.work.startToday.ms) + " " + (seven.work.startToday.auto ? t("f.start.auto") : t("f.start.def")) : dash],
       [w ? "pace7" : "pace7.cal", w, seven.work ? `${n2(seven.work.elapsedH)} h / ${n2(seven.work.totalH)} h` : "", p1(seven.pace)],
-      ["ratio", "", m.ratioEstimated ? t("f.ratio.est") : t("f.ratio.def"), p1(m.ratio)],
+      ["ratio", "", m.ratioEstimated ? t("f.ratio.est", { pts: num(m.ratioPoints, 0) }) : t("f.ratio.def"), p1(m.ratio)],
       ["u0", "", "", p1(seven.startUsed)],
       ["days", "", "", n2(seven.daysLeft) + " d"],
       ["budget", "", `(100 − ${p1(seven.startUsed)}) / ${n2(seven.daysLeft)}`, p1(seven.dailyBudget)],
@@ -179,17 +180,14 @@ window.CU = window.CU || {};
       ["share", "", "", ""],
     ].filter(Boolean);
     return `
-      <details class="card formulas" data-key="formulas"${open ? " open" : ""}>
-        <summary><h2>${t("formulas.title")}</h2><span class="hint">${t("formulas.hint")}</span></summary>
-        <p class="note">${t(w ? "formulas.slider" : "formulas.slider.off")}</p>
+        <p class="lead">${t(w ? "formulas.slider" : "formulas.slider.off")}</p>
         <table class="eqs">
           ${rows.map(([id, flag, calc, val]) => `
             <tr${flag ? ' class="flag"' : ""}>
               <th>${t("f." + id + ".name")}${flag ? ` <span class="badge">${t("formulas.badge")}</span>` : ""}</th>
               <td><code>${t("f." + id + ".eq")}</code>${calc || val ? `<br><span class="calc">${calc}${val ? (calc ? " = " : "") + "<b>" + val + "</b>" : ""}</span>` : ""}</td>
             </tr>`).join("")}
-        </table>
-      </details>`;
+        </table>`;
   };
 
   CU.views = { detail, compact };

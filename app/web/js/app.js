@@ -11,16 +11,16 @@
   }
 
   const SERVED = location.protocol.startsWith("http");
-  const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen", FORMULAS_KEY = "cu.formulasOpen";
+  const VIEW_KEY = "cu.view", BREAKDOWN_KEY = "cu.breakdownOpen", NOTES_KEY = "cu.notes";
   const HOURS_KEY = "cu.hours", WORK_KEY = "cu.workHours";
   const chartsOpen = {};
-  let view = "detail", breakdownOpen = false, formulasOpen = false, hours = 8, workOn = false;
+  let view = "detail", breakdownOpen = false, notesOn = true, hours = 8, workOn = false;
   try {
     const saved = parseInt(localStorage.getItem(HOURS_KEY), 10);
     if (saved >= 1 && saved <= 24) hours = saved;
     view = localStorage.getItem(VIEW_KEY) || "detail";
     breakdownOpen = localStorage.getItem(BREAKDOWN_KEY) === "1";
-    formulasOpen = localStorage.getItem(FORMULAS_KEY) === "1";
+    notesOn = localStorage.getItem(NOTES_KEY) !== "0";
     workOn = localStorage.getItem(WORK_KEY) === "1";
   } catch (e) { /* storage unavailable */ }
   if (!CU.views[view]) view = "detail";
@@ -28,10 +28,9 @@
   // the breakdown <details> is recreated on every render: remember whether it is open
   $("app").addEventListener("toggle", e => {
     if (e.target.classList.contains("chart")) { chartsOpen[e.target.dataset.key] = e.target.open; return; }
-    const isFormulas = e.target.classList.contains("formulas");
-    if (!isFormulas && !e.target.classList.contains("breakdown")) return;
-    if (isFormulas) formulasOpen = e.target.open; else { breakdownOpen = e.target.open; CU.fitBars(e.target); }
-    try { localStorage.setItem(isFormulas ? FORMULAS_KEY : BREAKDOWN_KEY, e.target.open ? "1" : "0"); } catch (err) { /* ignore */ }
+    if (!e.target.classList.contains("breakdown")) return;
+    breakdownOpen = e.target.open; CU.fitBars(e.target);
+    try { localStorage.setItem(BREAKDOWN_KEY, e.target.open ? "1" : "0"); } catch (err) { /* ignore */ }
   }, true);
 
   /* ---------- data ---------- */
@@ -82,14 +81,15 @@
       $("app").innerHTML = `<div class="card empty">${CU.t("empty")}</div>`;
       err.hidden = !(D && D.error);
       if (D && D.error) err.innerHTML = errorHtml(D.error_code, D.error, D.diagnostics);
-      $("foot").textContent = "";
       $("meta").textContent = "—";
       return;
     }
     const restoreFocus = CU.captureFocus($("app"));          // the page is rebuilt below: keep the keyboard focus where it was
-    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.charts(m).replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : "")) + CU.formulas(m, formulasOpen);
+    $("app").innerHTML = CU.views[view](m) + CU.breakdown(m, breakdownOpen) + CU.charts(m).replace(/<details class="card chart" data-key="(\w+)"/g, (a, k) => a + (chartsOpen[k] ? " open" : ""));
+    applyNotes();
     CU.fitBars($("app"));
     CU.chartsAfterRender($("app"));
+    if ($("how").open) $("how-body").innerHTML = CU.formulas(m);
     restoreFocus();
 
     const due = pollerState && Date.parse(pollerState.next_at), wait = due - Date.now();
@@ -99,8 +99,6 @@
     err.hidden = !m.error;
     if (m.error) err.innerHTML = errorHtml(m.errorCode, m.error, m.diagnostics);
 
-    const source = m.ratioEstimated ? CU.t("foot.estimated", { pts: m.ratioPoints }) : CU.t("foot.default");
-    $("foot").innerHTML = CU.t("foot.ratio", { ratio: CU.fmt.pct(m.ratio, 1), source }) + "<br>" + CU.t("foot.limit");
   }
 
   /* ---------- hours-per-day slider (side panel, outside #app so re-renders never reset it) ---------- */
@@ -125,6 +123,45 @@
     showHours();
     render();
   });
+
+  /* ---------- explanations: one global switch, plus a "?" per panel that flips its own note ----------
+     A note is shown when the global switch is on, unless its panel's "?" hid it (and the other way round).
+     The per-panel choices last until the global switch is used again. */
+  const noteFlip = {};
+  function applyNotes() {
+    document.body.classList.toggle("notes-off", !notesOn);
+    const notesBtn = $("notes");
+    notesBtn.setAttribute("aria-pressed", String(notesOn));
+    document.querySelectorAll("[data-note]").forEach(n => { n.hidden = notesOn === !!noteFlip[n.dataset.note]; });
+    document.querySelectorAll("[data-note-for]").forEach(b => {
+      b.setAttribute("aria-pressed", String(notesOn !== !!noteFlip[b.dataset.noteFor]));
+    });
+  }
+  $("notes").addEventListener("click", () => {
+    notesOn = !notesOn;
+    for (const k in noteFlip) delete noteFlip[k];
+    try { localStorage.setItem(NOTES_KEY, notesOn ? "1" : "0"); } catch (e) { /* ignore */ }
+    applyNotes();
+  });
+  $("app").addEventListener("click", e => {
+    const b = e.target.closest && e.target.closest("[data-note-for]");
+    if (!b) return;
+    e.preventDefault();                        // the button sits in a <summary>: do not let it fold the panel
+    const key = b.dataset.noteFor, d = b.closest("details");
+    noteFlip[key] = !noteFlip[key];
+    if (d && !d.open && notesOn !== noteFlip[key]) d.open = true;      // showing the note of a folded panel opens it
+    applyNotes();
+  });
+
+  /* ---------- "how it is computed": a floating panel opened by the "?" button ---------- */
+  const how = $("how");
+  $("how-open").addEventListener("click", () => {
+    const m = CU.compute(window.CLAUDE_USAGE, Date.now(), { hoursPerDay: workOn ? hours : 24, workHours: workOn });
+    $("how-body").innerHTML = m ? CU.formulas(m) : `<p class="lead">${CU.t("empty")}</p>`;
+    if (how.showModal) how.showModal(); else how.setAttribute("open", "");
+  });
+  $("how-close").addEventListener("click", () => how.close ? how.close() : how.removeAttribute("open"));
+  how.addEventListener("click", e => { if (e.target === how && how.close) how.close(); });     // click on the backdrop
 
   /* ---------- working-hours switch: off = the week's pace follows calendar time (24 h a day), slider hidden ---------- */
   const workBox = $("work-on");

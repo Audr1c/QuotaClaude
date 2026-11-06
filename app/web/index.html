@@ -23,10 +23,12 @@
           <button type="button" data-lang="en" aria-pressed="true">EN</button>
           <button type="button" data-lang="fr" aria-pressed="false">FR</button>
         </div>
+        <button type="button" class="btn toggle" id="notes" aria-pressed="true" data-i18n-title="notes.title"><span data-i18n="notes.label">Explanations</span></button>
         <button type="button" class="btn" id="refresh" data-i18n-title="refresh.title">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span data-i18n="refresh">Refresh</span>
         </button>
+        <button type="button" class="btn qbtn-big" id="how-open" aria-haspopup="dialog" data-i18n-title="formulas.title" data-i18n-aria="formulas.title">?</button>
       </div>
     </header>
     <div id="err" class="err" hidden></div>
@@ -48,7 +50,14 @@
         </div>
       </aside>
     </div>
-    <footer class="foot" id="foot"></footer>
+    <dialog id="how" class="how" aria-labelledby="how-title">
+      <div class="how-head">
+        <h2 id="how-title" data-i18n="formulas.title">How it is computed</h2>
+        <span class="hint" data-i18n="formulas.hint">every number, with your values</span>
+        <button type="button" class="btn" id="how-close" data-i18n-aria="close" data-i18n-title="close">✕</button>
+      </div>
+      <div id="how-body"></div>
+    </dialog>
   </div>
 
   <!-- initial data (also works when this page is opened as a plain file) -->
