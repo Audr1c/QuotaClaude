@@ -226,10 +226,13 @@ window.CU = window.CU || {};
     const gauges = !on("gauges") ? "" : lv <= 3 ? CU.strip(m, lv) : lv === 4 ? compact(m) : detail(m);
     if (lv <= 4)                                                           // one line per panel
       return `<div class="dash"><div class="col col-gauges">${gauges}${hasCharts && CU.minis ? CU.minis(m, lv, panels) : ""}</div></div>`;
-    const hourly = hasCharts && on("hourly") ? open(CU.charts(m, ["hourly"], lv)) : "";      // first column, under the gauges
-    const charts = ["ratio"].filter(on);
-    return `<div class="dash"><div class="col col-gauges">${gauges}${hourly}${on("breakdown") ? CU.breakdown(m, opts.breakdownOpen) : ""}</div>`
-      + `<div class="col col-charts">${hasCharts && charts.length ? open(CU.charts(m, charts, lv)) : ""}</div>`
+    // Level 6 (full charts, tall): usage per hour goes under the gauges, and the breakdown under the ratio chart,
+    // so the three columns end at about the same height. Level 5 (small cards): hourly and ratio share column 2.
+    const hourly = hasCharts && on("hourly") ? open(CU.charts(m, ["hourly"], lv)) : "", under = lv >= 6;
+    const ratio = hasCharts && on("ratio") ? open(CU.charts(m, ["ratio"], lv)) : "";
+    const breakdown = on("breakdown") ? CU.breakdown(m, opts.breakdownOpen) : "";
+    return `<div class="dash"><div class="col col-gauges">${gauges}${under ? hourly : breakdown}</div>`
+      + `<div class="col col-charts">${under ? ratio + breakdown : hourly + ratio}</div>`
       + `<div class="col col-tokens">${hasCharts && on("tokens") ? open(CU.charts(m, ["tokens"], lv)) : ""}</div></div>`;
   };
   /* automatic level: the widest one whose minimum width (px of content) is reached */
