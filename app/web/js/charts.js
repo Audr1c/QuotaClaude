@@ -353,6 +353,10 @@ window.CU = window.CU || {};
     CU.lastModel = m;
     const on = key => panels[key] !== false;
     const rows = [on("tokens") && miniTokens(m, L), on("ratio") && miniRatio(m, L), on("hourly") && miniHourly(m, L), on("breakdown") && miniBreakdown(m, L)].filter(Boolean);
+    if (L < 2) {                                                           // level 1: the bars only, no text (still a tooltip on each cell)
+      const bars = rows.filter(r => r.body);
+      return bars.length ? `<section class="card minis lvl1" role="group" aria-label="${t("mini.aria")}">${bars.map(r => `<div class="mrow" data-mini="${r.key}" title="${r.title} · ${r.figs.replace(/<[^>]+>/g, "")}"><div class="mbody">${r.body}</div></div>`).join("")}</section>` : "";
+    }
     if (!rows.length) return "";
     return `<section class="card minis lvl${L}" role="group" aria-label="${t("mini.aria")}">${rows.map(r => `
         <div class="mrow" data-mini="${r.key}"><span class="mlabel">${r.title}</span>${r.body ? `<div class="mbody">${r.body}</div>` : ""}<span class="mfigs">${r.figs}</span></div>`).join("")}
