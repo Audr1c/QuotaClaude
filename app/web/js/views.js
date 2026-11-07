@@ -212,21 +212,26 @@ window.CU = window.CU || {};
 
   CU.views = { detail, compact };
 
-  /* ---------------- the whole page for a compactness level (UI-5); also used by the VS Code view ----------------
-     Each level keeps everything of the level below and adds to it: 1-3 strip, 4 the two rings in one gauge, 5 two
-     gauges + key figures, 6 + hourly chart, 7 + ratio chart and the tokens summary, 8 full charts, 9 everything
-     (breakdown, per-day tokens, settings), 10 = 9 + the explanations. Three columns on a wide screen (style.css). */
+  /* ---------------- the whole page for a compactness level; also used by the VS Code view ----------------
+     Six levels, and every panel is always there (unless hidden in the settings: opts.panels):
+       1  the two thin bars only                       2  + % and pace marker, and each panel as one line
+       3  + reset times, a second figure per line      4  the two rings in one gauge, a small drawing per line
+       5  full gauges, small charts and tokens cards   6  everything (range controls, tables, per-day tokens)
+       7 (= 6 + Explanations) the short note under each panel.
+     Three columns on a wide screen (style.css). */
   CU.compose = function (m, L, opts = {}) {
-    const chartsOpen = opts.chartsOpen || {};
+    const chartsOpen = opts.chartsOpen || {}, panels = opts.panels || {}, on = k => panels[k] !== false;
     const open = html => html.replace(/<details class="card chart" data-key="(\w+)"[^>]*/g, (a, k) => a + (chartsOpen[k] === false ? "" : " open"));
-    const gauges = L <= 3 ? CU.strip(m, L) : L === 4 ? compact(m) : detail(m);
-    const charts = L >= 7 ? ["hourly", "ratio"] : L >= 6 ? ["hourly"] : [];
-    const lv = Math.min(L, 9), hasCharts = !!CU.charts;
-    return `<div class="dash"><div class="col col-gauges">${gauges}${L >= 9 ? CU.breakdown(m, opts.breakdownOpen) : ""}</div>`
+    const lv = Math.min(L, 6), hasCharts = !!CU.charts;
+    const gauges = !on("gauges") ? "" : lv <= 3 ? CU.strip(m, lv) : lv === 4 ? compact(m) : detail(m);
+    if (lv <= 4)                                                           // one line per panel
+      return `<div class="dash"><div class="col col-gauges">${gauges}${hasCharts && CU.minis ? CU.minis(m, lv, panels) : ""}</div></div>`;
+    const charts = ["hourly", "ratio"].filter(on);
+    return `<div class="dash"><div class="col col-gauges">${gauges}${on("breakdown") ? CU.breakdown(m, opts.breakdownOpen) : ""}</div>`
       + `<div class="col col-charts">${hasCharts && charts.length ? open(CU.charts(m, charts, lv)) : ""}</div>`
-      + `<div class="col col-tokens">${hasCharts && L >= 7 ? open(CU.charts(m, ["tokens"], lv)) : ""}</div></div>`;
+      + `<div class="col col-tokens">${hasCharts && on("tokens") ? open(CU.charts(m, ["tokens"], lv)) : ""}</div></div>`;
   };
   /* automatic level: the widest one whose minimum width (px of content) is reached */
-  CU.LEVEL_WIDTHS = [[0, 1], [200, 2], [260, 3], [330, 4], [400, 5], [520, 6], [640, 7], [760, 8], [880, 9]];
+  CU.LEVEL_WIDTHS = [[0, 1], [200, 2], [280, 3], [360, 4], [480, 5], [760, 6]];
   CU.levelFor = w => CU.LEVEL_WIDTHS.reduce((lv, [min, l]) => (w >= min ? l : lv), 1);
 })(window.CU);

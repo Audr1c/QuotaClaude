@@ -22,14 +22,16 @@ THEME_PRESETS = ("claude", "contrast", "colorblind", "mono")
 THEME_COLORS = ("five", "seven", "ok", "bad")          # the colours a user may override (THM-1)
 THEME_FONTS = ("default", "sans", "serif", "mono")     # system fonts only, nothing is downloaded
 
+PANELS = ("gauges", "tokens", "ratio", "hourly", "breakdown")     # the panels the user may hide (independent of the level)
 DEFAULTS = {"level": "auto", "notes": True, "work_hours": False, "hours": 8, "lang": None,
+            "panels": {k: True for k in PANELS},
             "theme": {"preset": "claude", "light": {}, "dark": {}, "font": "default"}}
 
 
 def _level(v):
-    if v == "auto" or (isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 9):
+    if v == "auto" or (isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 6):
         return v
-    raise ValueError("level: 'auto' or 1..9")
+    raise ValueError("level: 'auto' or 1..6")
 
 
 def _bool(name):
@@ -38,6 +40,12 @@ def _bool(name):
             return v
         raise ValueError(f"{name}: true or false")
     return check
+
+
+def _panels(v):
+    if not isinstance(v, dict) or set(v) - set(PANELS) or any(not isinstance(x, bool) for x in v.values()):
+        raise ValueError(f"panels: {{{', '.join(PANELS)}}} as true or false")
+    return {k: v.get(k, True) for k in PANELS}
 
 
 def _hours(v):
@@ -75,7 +83,7 @@ def _theme(v):
 
 
 CHECKS = {"level": _level, "notes": _bool("notes"), "work_hours": _bool("work_hours"), "hours": _hours,
-          "lang": _lang, "theme": _theme}
+          "lang": _lang, "theme": _theme, "panels": _panels}
 
 
 def validate(changes) -> dict:

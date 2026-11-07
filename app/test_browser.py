@@ -72,12 +72,15 @@ async function open(browser, timezoneId) {
 async function levels(page) {
   if (!(await page.$('#level'))) return null;
   const out = {};
-  for (let lv = 1; lv <= 9; lv++) {
+  for (let lv = 1; lv <= 6; lv++) {
     await page.evaluate(v => { const e = document.querySelector('#level'); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); }, lv);
     await sleep(150);
     out[lv] = await page.evaluate(() => ({
       level: document.body.dataset.level,
       strip: !!document.querySelector('.strip'),
+      minis: document.querySelectorAll('.minis .mrow').length,
+      heat: !!document.querySelector('.minis .heat'),
+      hbars: !!document.querySelector('.minis .hbars'),
       compact: !!document.querySelector('.compact'),
       gauges: document.querySelectorAll('svg.gauge').length,
       hourly: !!document.querySelector('[data-key=hourly]'),
@@ -105,7 +108,7 @@ const label = (page) => page.evaluate(() => { const r = document.querySelector('
 
 async function drags(page) {
   if (await page.$('#level')) {
-    await page.evaluate(() => { const e = document.querySelector('#level'); e.value = '9'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.evaluate(() => { const e = document.querySelector('#level'); e.value = '6'; e.dispatchEvent(new Event('input', { bubbles: true })); });
     await sleep(200);
   }
   await page.evaluate(() => { const d = document.querySelector('[data-key=hourly]'); d.open = true; d.scrollIntoView({ block: 'center' }); });
@@ -214,18 +217,23 @@ class BrowserTest(unittest.TestCase):
         lv = self.r["levels"]
         if lv is None:
             self.fail("the widget has no #level slider")
-        for n in range(1, 10):
-            # level 9 with Explanations on (the default) is shown as level 10
-            self.assertIn(lv[str(n)]["level"], (str(n), "10") if n == 9 else (str(n),))
+        for n in range(1, 7):
+            # level 6 with Explanations on (the default) is shown as level 7
+            self.assertIn(lv[str(n)]["level"], (str(n), "7") if n == 6 else (str(n),))
         self.assertTrue(lv["1"]["strip"])
+        self.assertEqual(lv["1"]["minis"], 0)                  # level 1: the two bars only
+        for n in "234":                                         # every panel stays, as one line
+            self.assertGreaterEqual(lv[n]["minis"], 2)
+        self.assertTrue(lv["2"]["heat"])
+        self.assertTrue(lv["4"]["hbars"])
         self.assertTrue(lv["4"]["compact"])
         self.assertEqual(lv["5"]["gauges"], 2)
-        self.assertTrue(lv["6"]["hourly"])
-        self.assertTrue(lv["7"]["ratio"])
+        self.assertTrue(lv["5"]["hourly"])
+        self.assertTrue(lv["5"]["ratio"])
         if self.state.get("tokens"):
-            self.assertTrue(lv["7"]["tokens"])
-        self.assertTrue(lv["9"]["breakdown"])
-        self.assertTrue(lv["9"]["hoursVisible"])
+            self.assertTrue(lv["5"]["tokens"])
+        self.assertTrue(lv["6"]["breakdown"])
+        self.assertTrue(lv["6"]["hoursVisible"])
 
     def test_notes_toggle(self):
         n = self.r["notes"]
