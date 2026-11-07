@@ -226,8 +226,9 @@ window.CU = window.CU || {};
     const gauges = !on("gauges") ? "" : lv <= 3 ? CU.strip(m, lv) : lv === 4 ? compact(m) : detail(m);
     if (lv <= 4)                                                           // one line per panel
       return `<div class="dash"><div class="col col-gauges">${gauges}${hasCharts && CU.minis ? CU.minis(m, lv, panels) : ""}</div></div>`;
-    const charts = ["hourly", "ratio"].filter(on);
-    return `<div class="dash"><div class="col col-gauges">${gauges}${on("breakdown") ? CU.breakdown(m, opts.breakdownOpen) : ""}</div>`
+    const hourly = hasCharts && on("hourly") ? open(CU.charts(m, ["hourly"], lv)) : "";      // first column, under the gauges
+    const charts = ["ratio"].filter(on);
+    return `<div class="dash"><div class="col col-gauges">${gauges}${hourly}${on("breakdown") ? CU.breakdown(m, opts.breakdownOpen) : ""}</div>`
       + `<div class="col col-charts">${hasCharts && charts.length ? open(CU.charts(m, charts, lv)) : ""}</div>`
       + `<div class="col col-tokens">${hasCharts && on("tokens") ? open(CU.charts(m, ["tokens"], lv)) : ""}</div></div>`;
   };
