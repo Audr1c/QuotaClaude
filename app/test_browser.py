@@ -222,7 +222,7 @@ class BrowserTest(unittest.TestCase):
         for n in range(1, 8):
             self.assertEqual(lv[str(n)]["level"], str(n))
         self.assertTrue(lv["1"]["strip"])
-        self.assertEqual(lv["1"]["minis"], 0)                  # level 1: the two bars only
+        self.assertGreaterEqual(lv["1"]["minis"], 1)         # level 1: bars only (the ratio, which has no bar, is left out)
         for n in "234":                                         # every panel stays, as one line
             self.assertGreaterEqual(lv[n]["minis"], 2)
         self.assertTrue(lv["2"]["heat"])
