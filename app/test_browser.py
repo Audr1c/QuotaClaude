@@ -72,7 +72,7 @@ async function open(browser, timezoneId) {
 async function levels(page) {
   if (!(await page.$('#level'))) return null;
   const out = {};
-  for (let lv = 1; lv <= 6; lv++) {
+  for (let lv = 1; lv <= 7; lv++) {
     await page.evaluate(v => { const e = document.querySelector('#level'); e.value = String(v); e.dispatchEvent(new Event('input', { bubbles: true })); }, lv);
     await sleep(150);
     out[lv] = await page.evaluate(() => ({
@@ -94,12 +94,14 @@ async function levels(page) {
 }
 
 async function notes(page) {
-  if (!(await page.$('#notes'))) return null;
+  if (!(await page.$('#level'))) return null;
+  const setLevel = v => page.evaluate(x => { const e = document.querySelector('#level'); e.value = String(x); e.dispatchEvent(new Event('input', { bubbles: true })); }, v);
   const hiddenCount = () => page.evaluate(() => { const n = [...document.querySelectorAll('[data-note]')]; return { total: n.length, hidden: n.filter(e => e.hasAttribute('hidden')).length }; });
+  await setLevel(6); await sleep(150);
   const before = await hiddenCount();
-  await page.click('#notes'); await sleep(150);
+  await setLevel(7); await sleep(150);
   const after = await hiddenCount();
-  await page.click('#notes'); await sleep(150);
+  await setLevel(6); await sleep(150);
   const again = await hiddenCount();
   return { before, after, again };
 }
@@ -217,9 +219,8 @@ class BrowserTest(unittest.TestCase):
         lv = self.r["levels"]
         if lv is None:
             self.fail("the widget has no #level slider")
-        for n in range(1, 7):
-            # level 6 with Explanations on (the default) is shown as level 7
-            self.assertIn(lv[str(n)]["level"], (str(n), "7") if n == 6 else (str(n),))
+        for n in range(1, 8):
+            self.assertEqual(lv[str(n)]["level"], str(n))
         self.assertTrue(lv["1"]["strip"])
         self.assertEqual(lv["1"]["minis"], 0)                  # level 1: the two bars only
         for n in "234":                                         # every panel stays, as one line
@@ -238,7 +239,7 @@ class BrowserTest(unittest.TestCase):
     def test_notes_toggle(self):
         n = self.r["notes"]
         if n is None:
-            self.fail("the widget has no #notes button")
+            self.fail("the widget has no #level slider")
         self.assertGreater(n["before"]["total"], 0)
         self.assertNotEqual(n["before"]["hidden"], n["after"]["hidden"])
         self.assertEqual(n["before"]["hidden"], n["again"]["hidden"])

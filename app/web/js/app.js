@@ -11,19 +11,18 @@
   }
 
   const SERVED = location.protocol.startsWith("http");
-  const LEVEL_KEY = "cu.detail", PANELS_KEY = "cu.panels", BREAKDOWN_KEY = "cu.breakdownOpen", NOTES_KEY = "cu.notes";
+  const LEVEL_KEY = "cu.detail", PANELS_KEY = "cu.panels", BREAKDOWN_KEY = "cu.breakdownOpen";
   const HOURS_KEY = "cu.hours", WORK_KEY = "cu.workHours";
   const chartsOpen = {};
-  let panels = {}, levelPref = "auto", breakdownOpen = false, notesOn = true, hours = 8, workOn = false;
+  let panels = {}, levelPref = "auto", breakdownOpen = false, hours = 8, workOn = false;
   try {
     const saved = parseInt(localStorage.getItem(HOURS_KEY), 10);
     if (saved >= 1 && saved <= 24) hours = saved;
     const lv = parseInt(localStorage.getItem(LEVEL_KEY), 10);
-    if (lv >= 1 && lv <= 6) levelPref = lv;
+    if (lv >= 1 && lv <= 7) levelPref = lv;
     const pn = JSON.parse(localStorage.getItem(PANELS_KEY) || "null");
     if (pn && typeof pn === "object") panels = pn;
     breakdownOpen = localStorage.getItem(BREAKDOWN_KEY) === "1";
-    notesOn = localStorage.getItem(NOTES_KEY) !== "0";
     workOn = localStorage.getItem(WORK_KEY) === "1";
   } catch (e) { /* storage unavailable */ }
 
@@ -85,7 +84,7 @@
   // Everything render() depends on besides the clock: if it is unchanged, the periodic tick can skip the rebuild.
   const signature = () => {
     const D = window.CLAUDE_USAGE || {};
-    return JSON.stringify([D.generated_at, D.fetched_at, D.error, pollerState && pollerState.next_at, level(), workOn, hours, notesOn, CU.lang, panels]);
+    return JSON.stringify([D.generated_at, D.fetched_at, D.error, pollerState && pollerState.next_at, level(), workOn, hours, CU.lang, panels]);
   };
   let lastSig = null, lastRender = 0;
   function render() {
@@ -138,26 +137,17 @@
     render();
   });
 
-  /* ---------- explanations: one global switch, plus a "?" per panel that flips its own note ----------
+  /* ---------- explanations: level 7 is the global switch, plus a "?" per panel that flips its own note ----------
      A note is shown when the global switch is on, unless its panel's "?" hid it (and the other way round).
-     The per-panel choices last until the global switch is used again. */
+     The per-panel choices last until the detail level is changed. */
   const noteFlip = {};
   function applyNotes() {
     const on = level() === 7;
-    $("notes").setAttribute("aria-pressed", String(on));
     document.querySelectorAll("[data-note]").forEach(n => { n.hidden = on === !!noteFlip[n.dataset.note]; });
     document.querySelectorAll("[data-note-for]").forEach(b => {
       b.setAttribute("aria-pressed", String(on !== !!noteFlip[b.dataset.noteFor]));
     });
   }
-  // "Explanations" = the 7th notch, apart from the slider: from a lower level it jumps to 6 + explanations
-  $("notes").addEventListener("click", () => {
-    if (baseLevel() < 6) { levelPref = 6; notesOn = true; } else notesOn = !notesOn;
-    for (const k in noteFlip) delete noteFlip[k];
-    try { localStorage.setItem(NOTES_KEY, notesOn ? "1" : "0"); localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
-    share({ notes: notesOn, level: levelPref });
-    showLevel(); render();
-  });
   $("app").addEventListener("click", e => {
     const b = e.target.closest && e.target.closest("[data-note-for]");
     if (!b) return;
@@ -217,20 +207,21 @@
   let autoLevel = 6;
   const levelFor = CU.levelFor;
   const baseLevel = () => levelPref === "auto" ? autoLevel : levelPref;
-  const level = () => (baseLevel() === 6 && notesOn ? 7 : baseLevel());
+  const level = baseLevel;                           // 7 = level 6 + the explanations
   CU.level = level;
   const levelInput = $("level");
   function showLevel() {
     const b = baseLevel(), L = level();
     levelInput.value = b;
     $("level-value").textContent = CU.t("level.value", { n: b });
-    levelInput.setAttribute("aria-valuetext", CU.t("level.value", { n: b }) + (L === 10 ? " + " + CU.t("notes.label") : ""));
+    levelInput.setAttribute("aria-valuetext", CU.t("level.value", { n: b }) + (L === 7 ? " + " + CU.t("notes.label") : ""));
     $("level-auto").setAttribute("aria-pressed", String(levelPref === "auto"));
     document.body.dataset.level = L;
     $("hours-box").hidden = L < 6;                     // settings belong to the "everything" level
   }
   levelInput.addEventListener("input", () => {
     levelPref = parseInt(levelInput.value, 10) || 6;
+    for (const k in noteFlip) delete noteFlip[k];            // per-panel "?" choices last until the level changes
     try { localStorage.setItem(LEVEL_KEY, String(levelPref)); } catch (e) { /* ignore */ }
     share({ level: levelPref });
     showLevel(); render();
@@ -307,9 +298,9 @@
     return fetch("/api/v1/config", { cache: "no-store" }).then(r => (r.ok ? r.json() : null)).then(c => {
       const w = c && c.widget;
       if (!w) return;
-      levelPref = w.level === "auto" || (w.level >= 1 && w.level <= 6) ? w.level : levelPref;
+      levelPref = w.level === "auto" || (w.level >= 1 && w.level <= 7) ? w.level : levelPref;
       if (w.panels && typeof w.panels === "object") panels = w.panels;
-      notesOn = w.notes !== false; workOn = !!w.work_hours;
+      workOn = !!w.work_hours;
       if (w.hours >= 1 && w.hours <= 24) hours = w.hours;
       const urlLang = new URLSearchParams(location.search).get("lang");
       if (w.lang && !urlLang && w.lang !== CU.lang) CU.setLang(w.lang);   // ?lang= in the address wins

@@ -29,9 +29,9 @@ DEFAULTS = {"level": "auto", "notes": True, "work_hours": False, "hours": 8, "la
 
 
 def _level(v):
-    if v == "auto" or (isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 6):
+    if v == "auto" or (isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 7):
         return v
-    raise ValueError("level: 'auto' or 1..6")
+    raise ValueError("level: 'auto' or 1..7")
 
 
 def _bool(name):
