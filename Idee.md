@@ -36,18 +36,18 @@ Ce qui était vérifié et correct dès la 1.1.0 : écoute sur `127.0.0.1` seule
 
 | # | Code | Idée | Effort | Dépend de |
 |---|---|---|---|---|
-| 1 | `UI-3` | Rythme selon les heures de travail : interrupteur on/off | S | — |
-| 2 | `UI-1` | Textes d'aide : raccourcir, supprimer les doublons, pouvoir les masquer | S à M | — |
-| 3 | `UI-4` | Graduations de temps sur les deux cadrans | M | `UI-3` (pour la semaine) |
-| 4 | `UI-2` | Page qui utilise la largeur, compatible tactile, vue compacte lisible | M à L | `UI-1` |
-| 5 | `UI-5` | Curseur de compacité (une dizaine de crans) et niveau choisi selon la largeur | L | `UI-1`, `UI-2` |
-| 6 | `ONB-1` | Assistant de première utilisation et menu plus clair | M | — |
-| 7 | `ACC-1` | Lancer et ouvrir le widget sans terminal | M | `ONB-1` |
-| 8 | `API-1`, `API-2` | Socle commun : stockage unique, API de lecture versionnée, réglages côté serveur | M à L | — |
-| 9 | `THM-1` | Thème personnalisable | M | `API-2` |
-| 10 | `VSC-1` | Extension VS Code : vue latérale et indicateur dans la barre d'état | M à L | `API-1`, `UI-5` |
-| 11 | `HUB-1` | Poller sur une machine toujours allumée | L | `API-1` |
-| 12 | `AND-1` | Android : PWA d'abord, widget natif ensuite | L | `API-1`, `HUB-1` |
+| 1 | ✅ `UI-3` | Rythme selon les heures de travail : interrupteur on/off (fait) | S | — |
+| 2 | ✅ `UI-1` | Textes d'aide : raccourcir, supprimer les doublons, pouvoir les masquer (fait) | S à M | — |
+| 3 | ✅ `UI-4` | Graduations de temps sur les deux cadrans (fait) | M | `UI-3` (pour la semaine) |
+| 4 | ✅ `UI-2` | Page qui utilise la largeur, compatible tactile, vue compacte lisible (fait) | M à L | `UI-1` |
+| 5 | ✅ `UI-5` | Curseur de compacité (une dizaine de crans) et niveau choisi selon la largeur (fait) | L | `UI-1`, `UI-2` |
+| 6 | ✅ `ONB-1` | Assistant de première utilisation et menu plus clair (fait) | M | — |
+| 7 | ✅ `ACC-1` | Lancer et ouvrir le widget sans terminal (fait : pistes 1 à 4 ; la 5, icône de notification, reste à étudier) | M | `ONB-1` |
+| 8 | ✅ `API-1`, `API-2` | Socle commun : stockage unique, API de lecture versionnée, réglages côté serveur (fait) | M à L | — |
+| 9 | ✅ `THM-1` | Thème personnalisable (fait) | M | `API-2` |
+| 10 | ✅ `VSC-1` | Extension VS Code : vue latérale et indicateur dans la barre d'état (fait, à essayer dans un vrai VS Code) | M à L | `API-1`, `UI-5` |
+| 11 | ✅ `HUB-1` | Poller sur une machine toujours allumée (fait : option A, le PC pousse ses relevés) | L | `API-1` |
+| 12 | ◐ `AND-1` | Android : PWA d'abord, widget natif ensuite (étape 1 faite : PWA installable, servie par le hub ; étape 2, widget natif, pas commencée : pas de SDK Android dans l’environnement de travail) | L | `API-1`, `HUB-1` |
 
 Les quatre premières sont des retouches de la page et ne touchent ni au jeton ni aux données : elles peuvent se faire dans l'ordre, une branche chacune. `UI-5` est le gros chantier de la page : il remplace la bascule Détaillé / Compact et prépare l'affichage sur les autres plateformes (VS Code, Android). Le socle `API-1` / `API-2` est ce qui permet de garder **un seul stockage** pour tous les appareils (voir le plan plus bas).
 
@@ -354,15 +354,15 @@ Déjà disponibles dans `latest.json` mais masqués dans le panneau depuis la re
 
 | Code | Point | Effort |
 |---|---|---|
-| `RES-1` | Relecture complète de `usage.csv` à chaque relevé : analyser les dates une fois, ou cache incrémental (≈ 3 s par relevé à 100 000 lignes) | M |
-| `RES-2` | Volume d'écriture dans `data/` à chaque relevé (surtout si le dossier est synchronisé) : n'écrire que ce qui a changé | M |
-| `RES-3` | Poller : réveil toutes les 5 s (`TICK_S`), à allonger quand il n'y a rien à surveiller ; premier palier de 30 s à reconsidérer | S |
-| `RES-4` | Widget : ne pas re-rendre toutes les 10 s si les données n'ont pas changé, pause quand l'onglet est caché (`visibilityState`) | S |
-| `SEC-1` | Pas de verrou entre le serveur et le poller (deux relevés simultanés possibles) | M |
-| `SEC-2` | Machine partagée : `SO_EXCLUSIVEADDRUSE` sous Windows, droits `chmod 600` de `data/` sous Linux | S |
-| `SEC-3` | Le lanceur vérifie mieux le pid renvoyé par `/api/ping` avant de l'arrêter | S |
-| `DAT-1` | Le premier relevé d'une nouvelle fenêtre de 5 h n'est pas compté dans l'usage par heure ni dans le ratio | S |
-| `DAT-2` | Jours UTC (tokens, ratio) contre jours locaux (répartition par produit, usage par heure) : harmoniser ou le dire dans les libellés | M |
-| `DAT-3` | Année absente des libellés de plage au-delà d'un an | S |
-| `TST-1` | Tests JavaScript plus larges (rendu des graphiques, glisser-déposer, passage à l'heure d'été) et test dans un vrai navigateur | M |
-| `TST-2` | Vérifier la compatibilité Python 3.8 à 3.10 (annoncée « 3.8+ » mais non testée) | S |
+| `RES-1` | ✅ Relecture complète de `usage.csv` à chaque relevé : analyser les dates une fois, ou cache incrémental (≈ 3 s par relevé à 100 000 lignes) | M |
+| `RES-2` | ✅ Volume d'écriture dans `data/` à chaque relevé (surtout si le dossier est synchronisé) : n'écrire que ce qui a changé | M |
+| `RES-3` | ✅ Poller : réveil toutes les 5 s (`TICK_S`), à allonger quand il n'y a rien à surveiller ; premier palier de 30 s à reconsidérer | S |
+| `RES-4` | ✅ Widget : ne pas re-rendre toutes les 10 s si les données n'ont pas changé, pause quand l'onglet est caché (`visibilityState`) | S |
+| `SEC-1` | ✅ Pas de verrou entre le serveur et le poller (deux relevés simultanés possibles) | M |
+| `SEC-2` | ✅ Machine partagée : `SO_EXCLUSIVEADDRUSE` sous Windows, droits `chmod 600` de `data/` sous Linux | S |
+| `SEC-3` | ✅ Le lanceur vérifie mieux le pid renvoyé par `/api/ping` avant de l'arrêter | S |
+| `DAT-1` | ✅ Le premier relevé d'une nouvelle fenêtre de 5 h n'est pas compté dans l'usage par heure ni dans le ratio | S |
+| `DAT-2` | ✅ Jours UTC (tokens, ratio) contre jours locaux (répartition par produit, usage par heure) : harmoniser ou le dire dans les libellés | M |
+| `DAT-3` | ✅ Année absente des libellés de plage au-delà d'un an | S |
+| `TST-1` | ✅ Tests JavaScript plus larges (rendu des graphiques, glisser-déposer, passage à l'heure d'été) et test dans un vrai navigateur | M |
+| `TST-2` | ✅ Vérifier la compatibilité Python 3.8 à 3.10 (annoncée « 3.8+ » mais non testée) (3.8, 3.10 et 3.13 vérifiés) | S |

@@ -1,0 +1,37 @@
+{
+  "name": "claude-usage",
+  "displayName": "Claude Usage",
+  "description": "Your Claude 5-hour and weekly quota in the status bar and a side view, read from the local Claude Usage Tracker.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "claudeUsage", "title": "Claude Usage", "icon": "media/icon.svg" }]
+    },
+    "views": {
+      "claudeUsage": [{ "type": "webview", "id": "claudeUsage.view", "name": "Quota" }]
+    },
+    "commands": [
+      { "command": "claudeUsage.focus", "title": "Claude Usage: Show the side view" },
+      { "command": "claudeUsage.openWidget", "title": "Claude Usage: Open the widget in the browser" },
+      { "command": "claudeUsage.reload", "title": "Claude Usage: Read the data again" }
+    ],
+    "configuration": {
+      "title": "Claude Usage",
+      "properties": {
+        "claudeUsage.appFolder": { "type": "string", "default": "", "markdownDescription": "The tracker's `app` folder (the one with `run.py`). Empty: the folder this extension sits in, when it is run from `app/vscode`." },
+        "claudeUsage.source": { "type": "string", "enum": ["file", "api"], "default": "file", "markdownDescription": "`file`: read `data/latest.json` directly (no network). `api`: ask the tracker's server (`/api/v1/latest`), for example a hub on another machine." },
+        "claudeUsage.apiUrl": { "type": "string", "default": "http://127.0.0.1:8765", "description": "Address of the tracker's server (source = api, and the Open the widget command)." },
+        "claudeUsage.template": { "type": "string", "default": "{b5} {p5} · {b7} {p7}", "markdownDescription": "Status bar text. `{b5}` `{p5}`: bars and % of the 5-hour window; `{b7}` `{p7}`: the same for the week." },
+        "claudeUsage.warnAt": { "type": "number", "default": 80, "description": "Warning colour from this % (5-hour or week, the higher)." },
+        "claudeUsage.errorAt": { "type": "number", "default": 95, "description": "Error colour from this %." },
+        "claudeUsage.intervalSeconds": { "type": "number", "default": 30, "minimum": 5, "description": "How often to read again (the file is also watched)." }
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@
 
     python tools/make_icons.py        needs Pillow (pip install pillow)
 
-Writes assets/icon.svg, assets/icon-<size>.png, assets/icon.ico, web/favicon.svg, web/favicon.png
+Writes assets/icon.svg, assets/icon-<size>.png, assets/icon.ico, web/favicon.svg, web/favicon.png, web/icon-192/512.png
 """
 import math
 from pathlib import Path
@@ -64,6 +64,8 @@ def main():
         im.save(ROOT / "assets" / f"icon-{n}.png")
     frames[256].save(ROOT / "assets" / "icon.ico", sizes=[(n, n) for n in sizes], append_images=[frames[n] for n in sizes if n != 256])
     png(FAVICON, 64).save(ROOT / "web" / "favicon.png")
+    for n in (192, 512):                                             # installable web app (manifest.webmanifest)
+        png(TILE, n).save(ROOT / "web" / f"icon-{n}.png")
     print("icons written")
 
 

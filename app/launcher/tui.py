@@ -126,21 +126,25 @@ def read_key() -> str:
 # --------------------------------------------------------------------------- menus
 
 def choose(title: str, options: list[tuple[str, str]], *, hint: str, plain_hint: str = "",
-           intro: str = "", selected: int = 0) -> int | None:
-    """Show a menu; options are (label, description). Returns the chosen index, or None for Esc / q."""
+           intro: str = "", selected: int = 0, groups: dict[int, str] | None = None) -> int | None:
+    """Show a menu; options are (label, description). Returns the chosen index, or None for Esc / q.
+    groups: {index of the first option of a group: group name}, shown as a small header above it."""
+    groups = groups or {}
     if not interactive():
-        return _choose_plain(title, options, plain_hint or hint, intro)
+        return _choose_plain(title, options, plain_hint or hint, intro, groups)
 
     width = _width()
     wrapped = [textwrap.wrap(desc, width - 2) or [""] for _, desc in options]
     desc_height = max(len(w) for w in wrapped)           # constant height: the menu never "jumps"
-    intro_lines = textwrap.wrap(intro, width) if intro else []
+    intro_lines = [line for part in intro.split("\n") for line in textwrap.wrap(part, width)] if intro else []
 
     def render(idx: int) -> list[str]:
         out = [_style(BOLD + ORANGE, _fit(title, width))]
         out += [_style(DIM, line) for line in intro_lines]
         out.append("")
         for i, (label, _) in enumerate(options):
+            if i in groups:
+                out.append(_style(DIM, _fit(groups[i].upper(), width)))
             num = f"{i + 1}." if i < 9 else "  "
             text = _fit(f"{num} {label}", width - 2)
             out.append(f"{_style(ORANGE, '›')} {_style(BOLD, text)}" if i == idx else f"  {text}")
@@ -187,12 +191,15 @@ def choose(title: str, options: list[tuple[str, str]], *, hint: str, plain_hint:
     return result
 
 
-def _choose_plain(title: str, options: list[tuple[str, str]], hint: str, intro: str) -> int | None:
+def _choose_plain(title: str, options: list[tuple[str, str]], hint: str, intro: str,
+                  groups: dict[int, str] | None = None) -> int | None:
     print(title)
     if intro:
         print(intro)
     for i, (label, desc) in enumerate(options, 1):
-        print(f"  {i}) {label} - {desc}")
+        if groups and i - 1 in groups:
+            print(f"[{groups[i - 1]}]")
+        print(f"  {i}) {label} - {desc}" if desc else f"  {i}) {label}")
     print(hint)
     while True:
         try:
@@ -203,6 +210,10 @@ def _choose_plain(title: str, options: list[tuple[str, str]], hint: str, intro: 
             return None
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return int(raw) - 1
+
+
+def heading(text: str) -> None:
+    print(_style(BOLD + ORANGE, text) if interactive() else text)
 
 
 def ask(prompt: str, default: str = "") -> str:

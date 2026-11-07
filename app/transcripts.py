@@ -43,7 +43,8 @@ def projects_dir() -> Path:
 
 def _hour(ts) -> str | None:
     try:
-        d = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        # Python < 3.11 only accepts 3 or 6 fraction digits: drop the fraction, only the hour is kept anyway
+        d = datetime.fromisoformat(re.sub(r"\.\d+(?=[+-]\d\d:\d\d$|$)", "", ts.replace("Z", "+00:00")))
     except (ValueError, AttributeError):
         return None
     if d.tzinfo is None:
@@ -186,7 +187,7 @@ def scan(data_dir: Path, root: Path | None = None) -> dict:
 
 def _atomic(path: Path, text: str) -> None:
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")   # own name: the poller and the server never share a temp file
-    tmp.write_text(text, encoding="utf-8", newline="")
+    tmp.write_bytes(text.encode("utf-8"))                   # exact bytes (write_text(newline=) needs Python 3.10)
     for attempt in range(20):
         try:
             os.replace(tmp, path)

@@ -154,6 +154,24 @@ def open_widget(ui: Ui, browser: bool = True) -> bool:
     return False
 
 
+def _pid_refusal(pid) -> str | None:
+    """Return a reason not to kill `pid`, or None if it plausibly is our server."""
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 1:
+        return "invalid pid"
+    if pid == os.getpid():
+        return "pid is the launcher itself"
+    # On Windows os.kill terminates the process and there is no cheap command-line check: keep it as is.
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmdline = f.read()
+        except OSError:
+            return None                                   # /proc unreadable: cannot check further
+        if b"server.py" not in cmdline:
+            return "pid does not belong to server.py"
+    return None
+
+
 def stop_server(ui: Ui) -> bool:
     info = ping(DEFAULT_PORT)
     if not info:
@@ -163,8 +181,12 @@ def stop_server(ui: Ui) -> bool:
     if not pid:
         ui.say("stop.nopid")
         return False
+    reason = _pid_refusal(pid)
+    if reason:
+        print(ui.t("stop.fail", msg=reason))
+        return False
     try:
-        os.kill(int(pid), signal.SIGTERM)                 # the pid comes from our own verified server
+        os.kill(pid, signal.SIGTERM)
     except OSError as e:
         print(ui.t("stop.fail", msg=str(e)))
         return False
@@ -291,6 +313,121 @@ def remove_task(ui: Ui) -> bool:
     return True
 
 
+SHORTCUT_NAME = "Claude Usage"                      # the shortcut that opens the widget directly (no menu)
+DESKTOP_FILE = "claude-usage-widget.desktop"
+
+
+def xdg_desktop_dir() -> Path | None:
+    """The user's desktop folder on Linux (XDG_DESKTOP_DIR from user-dirs.dirs, else ~/Desktop), if it exists."""
+    home = Path.home()
+    try:
+        for line in (home / ".config" / "user-dirs.dirs").read_text(encoding="utf-8").splitlines():
+            if line.startswith("XDG_DESKTOP_DIR="):
+                d = Path(line.split("=", 1)[1].strip().strip('"').replace("$HOME", str(home)))
+                if d.is_dir():
+                    return d
+    except OSError:
+        pass
+    d = home / "Desktop"
+    return d if d.is_dir() else None
+
+
+def shortcut_paths() -> list[Path]:
+    """Where the shortcuts go: applications menu (+ desktop) on Linux, Start menu + desktop on Windows."""
+    if IS_WINDOWS:
+        appdata, profile = os.environ.get("APPDATA"), os.environ.get("USERPROFILE")
+        out = []
+        if appdata:
+            out.append(Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / f"{SHORTCUT_NAME}.lnk")
+        if profile and (Path(profile) / "Desktop").is_dir():
+            out.append(Path(profile) / "Desktop" / f"{SHORTCUT_NAME}.lnk")
+        return out
+    out = [Path.home() / ".local" / "share" / "applications" / DESKTOP_FILE]
+    desk = xdg_desktop_dir()
+    if desk:
+        out.append(desk / DESKTOP_FILE)
+    return out
+
+
+def desktop_entry(python: str) -> str:
+    def q(x: str) -> str:                                # Exec quoting of the Desktop Entry spec
+        return '"' + x.replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`").replace("$", "\\$") + '"'
+    return ("[Desktop Entry]\nType=Application\n"
+            f"Name={SHORTCUT_NAME}\nComment=Open the Claude usage widget (5-hour and weekly quota)\n"
+            f"Exec={q(python)} {q(str(ROOT / 'run.py'))} open\nPath={ROOT}\n"
+            f"Icon={ROOT / 'assets' / 'icon-256.png'}\nTerminal=false\nCategories=Utility;\n")
+
+
+def make_shortcut(ui: Ui, remove: bool = False) -> bool:
+    """A double-click that starts the server if needed and opens the widget, without the menu (ACC-1)."""
+    if not (IS_WINDOWS or IS_LINUX):
+        ui.say("shortcut.unsupported")
+        return False
+    paths = shortcut_paths()
+    if remove:
+        for path in paths:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        ui.say("shortcut.removed")
+        return True
+    try:
+        if IS_WINDOWS:
+            # paths go through environment variables, never into the PowerShell source
+            script = ("$s = New-Object -ComObject WScript.Shell; foreach ($p in $env:CU_LINKS.Split('|')) { "
+                      "$l = $s.CreateShortcut($p); $l.TargetPath = $env:CU_TARGET; $l.Arguments = $env:CU_ARGS; "
+                      "$l.WorkingDirectory = $env:CU_DIR; $l.IconLocation = $env:CU_ICON; $l.Description = 'Claude usage widget'; $l.Save() }")
+            env = dict(os.environ, CU_LINKS="|".join(str(p) for p in paths), CU_TARGET=background_python(),
+                       CU_ARGS=f'"{ROOT / "run.py"}" open', CU_DIR=str(ROOT), CU_ICON=str(ROOT / "assets" / "icon.ico"))
+            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                               env=env, capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                print(ui.t("shortcut.fail", msg=(r.stderr or r.stdout).strip()[:300]))
+                return False
+        else:
+            text = desktop_entry(sys.executable)
+            for path in paths:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                path.chmod(0o755)                         # desktops only launch executable .desktop files
+    except (OSError, subprocess.SubprocessError) as e:
+        print(ui.t("shortcut.fail", msg=str(e)))
+        return False
+    print(ui.t("shortcut.ok", where=", ".join(str(p) for p in paths)))
+    return True
+
+
+def hub_setup(ui: Ui, url: str | None, token: str | None, off: bool) -> bool:
+    """HUB-1 on the PC: push every reading to a hub (an always-on machine running server.py --token-file)."""
+    cfg = load_config()
+    if off:
+        cfg.pop("hub", None)
+        save_config(cfg)
+        try:
+            (DATA / "hub_token").unlink()
+        except OSError:
+            pass
+        ui.say("hub.off")
+        return True
+    if not url:
+        hub_cfg = cfg.get("hub") or {}
+        print(ui.t("hub.state.on", url=hub_cfg["url"]) if hub_cfg.get("url") else ui.t("hub.state.off"))
+        return True
+    if not (url.startswith("http://") or url.startswith("https://")) or not token:
+        ui.say("hub.usage")
+        return False
+    DATA.mkdir(parents=True, exist_ok=True)
+    path = DATA / "hub_token"
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)      # a secret: rights 0600
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(token.strip() + "\n")
+    cfg["hub"] = {"url": url.rstrip("/")}
+    save_config(cfg)
+    ui.say("hub.on", url=url.rstrip("/"))
+    return True
+
+
 def run_tests(ui: Ui) -> bool:
     ui.say("tests.running")
     code = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", str(ROOT), "-p", "test_*.py"],
@@ -355,16 +492,39 @@ def summary_line(ui: Ui) -> str:
                 d7=ui.pct((state.get("seven_day") or {}).get("pct")))
 
 
+def state_line(ui: Ui, server_on: bool) -> str:
+    """One line at the top of the menu: automatic readings, server, latest reading."""
+    try:
+        auto = poller.running() is not None
+    except OSError:
+        auto = False
+    state = load_state()
+    age = ago(state.get("fetched_at")) if state else None
+    last = ui.t("line.last", ago=ui.duration(age)) if age is not None else ui.t("line.last.none")
+    return " · ".join([ui.t("line.auto.on" if auto else "line.auto.off"),
+                       ui.t("line.server.on" if server_on else "line.server.off"), last])
+
+
+# menu entries, by group (see, readings, settings, maintenance)
+MENU = [("view", ["open", "server", "status"]), ("readings", ["read", "auto"]),
+        ("settings", ["setup", "lang"]), ("maint", ["tests", "quit"])]
+
+
 def main_menu(ui: Ui) -> Ui:
     banner.show(ui.t("banner.title"), ui.t("banner.tagline"))
-    keys = ["read", "open", "server", "auto", "status", "lang", "tests", "quit"]
+    keys, groups = [], {}
+    for group, items in MENU:
+        groups[len(keys)] = group
+        keys += items
     while True:
         # the server entry follows the real state: offers "start" when it is off, "stop" when it is on
-        server_key = "main.server.stop" if ping(DEFAULT_PORT) else "main.server.start"
+        server_on = bool(ping(DEFAULT_PORT))
+        server_key = "main.server.stop" if server_on else "main.server.start"
         options = [(ui.t(server_key if k == "server" else f"main.{k}"),
                     ui.t((server_key if k == "server" else f"main.{k}") + ".desc")) for k in keys]
         choice = tui.choose(ui.t("main.title"), options, hint=ui.t("menu.hint"), plain_hint=ui.t("plain.hint"),
-                            intro=summary_line(ui))
+                            intro=state_line(ui, server_on) + "\n" + summary_line(ui),
+                            groups={i: ui.t("group." + g) for i, g in groups.items()})
         if choice is None or keys[choice] == "quit":
             ui.say("bye")
             return ui
@@ -387,6 +547,10 @@ def main_menu(ui: Ui) -> Ui:
             status(ui)
         elif action == "tests":
             run_tests(ui)
+        elif action == "setup":
+            ui = setup_wizard(ui, ask_language=False)
+            print()
+            continue
         elif action == "lang":
             lang = pick_language(ui.lang)
             if lang:
@@ -400,6 +564,128 @@ def main_menu(ui: Ui) -> Ui:
         print()
 
 
+# --------------------------------------------------------------------------- first-run wizard
+
+def token_problem() -> "cu.TrackerError | None":
+    """None when a usable Claude Code token is there, otherwise the error that explains what is missing."""
+    try:
+        cu.read_token()
+        return None
+    except cu.TrackerError as e:
+        return e
+
+
+class Wizard:
+    """Asks yes/no questions with the recommended answer on Enter. With yes=True (--yes) nothing is asked:
+    every recommended answer is taken. Nothing is installed without an answer (Enter counts as one)."""
+
+    def __init__(self, ui: Ui, yes: bool = False):
+        self.ui, self.yes = ui, yes
+
+    def ask(self, question: str, explain: str, yes_desc: str = "", no_desc: str = "", default: bool = True) -> bool:
+        ui = self.ui
+        print()
+        print(explain)
+        if self.yes:
+            print(f"  → {question} {ui.t('setup.auto.yes') if default else ui.t('setup.auto.no')}")
+            return default
+        opts = [(ui.t("setup.yes.rec") if default else ui.t("setup.yes"), yes_desc),
+                (ui.t("setup.no") if default else ui.t("setup.no.rec"), no_desc)]
+        choice = tui.choose(question, opts, hint=ui.t("menu.hint.back"), plain_hint=ui.t("plain.hint"),
+                            selected=0 if default else 1)
+        return False if choice is None else choice == 0
+
+
+def setup_wizard(ui: Ui, yes: bool = False, ask_language: bool = True) -> Ui:
+    """Quick setup: language, Claude Code sign-in, first reading, automatic readings, widget at login, open it.
+    It can be replayed: what is already in place is said and skipped, never installed twice."""
+    cfg = load_config()
+    if ask_language and not yes:
+        lang = pick_language(cfg.get("lang"))
+        if lang:
+            ui = Ui(lang)
+    cfg["lang"] = ui.lang
+    save_config(cfg)
+    w = Wizard(ui, yes)
+    print()
+    tui.heading(ui.t("setup.title"))
+    print(ui.t("setup.intro"))
+    done: list[str] = []
+
+    # 2. is Claude Code signed in?
+    print()
+    print(ui.t("setup.step.token"))
+    problem = token_problem()
+    while problem is not None:
+        print("  ! " + ui.error_text(problem.code, str(problem)))
+        print("  " + ui.t("setup.token.howto"))
+        if yes or not w.ask(ui.t("setup.token.retry"), ui.t("setup.token.retry.explain"),
+                            ui.t("setup.token.retry.desc"), ui.t("setup.token.skip.desc")):
+            break
+        problem = token_problem()
+    has_token = problem is None
+    print("  " + ui.t("setup.token.ok" if has_token else "setup.token.missing"))
+
+    # 3. first reading
+    if has_token and w.ask(ui.t("setup.read.q"), ui.t("setup.read.explain")):
+        if read_now(ui):
+            done.append(ui.t("setup.done.read"))
+
+    # 4 and 5. automatic readings, widget at login
+    if IS_WINDOWS or IS_LINUX:
+        kind = scheduler_kind()
+        with_server = bool(cfg.get("server_at_login"))
+        if kind:
+            print()
+            print(ui.t("setup.auto.already", kind=ui.t(f"kind.{kind}")))
+            done.append(ui.t("setup.done.auto", kind=ui.t(f"kind.{kind}")))
+            if not with_server and w.ask(ui.t("setup.login.q"), ui.t("setup.login.explain"), default=True):
+                if install_task(ui, True):
+                    done.append(ui.t("setup.done.login"))
+            elif with_server:
+                done.append(ui.t("setup.done.login"))
+        elif w.ask(ui.t("setup.auto.q"), ui.t("setup.auto.explain.windows" if IS_WINDOWS else "setup.auto.explain.linux"),
+                   ui.t("setup.auto.yes.desc"), ui.t("setup.auto.no.desc")):
+            with_server = w.ask(ui.t("setup.login.q"), ui.t("setup.login.explain"))
+            if install_task(ui, with_server):
+                done.append(ui.t("setup.done.auto", kind=ui.t("kind." + (scheduler_kind() or "manual"))))
+                if with_server:
+                    done.append(ui.t("setup.done.login"))
+    else:
+        print()
+        ui.say("install.unsupported")
+
+    # 5b. a shortcut that opens the widget in one double-click
+    if (IS_WINDOWS or IS_LINUX) and w.ask(ui.t("setup.shortcut.q"), ui.t("setup.shortcut.explain")):
+        if any(p.exists() for p in shortcut_paths()):
+            print(ui.t("setup.shortcut.already"))
+            done.append(ui.t("setup.done.shortcut"))
+        elif make_shortcut(ui):
+            done.append(ui.t("setup.done.shortcut"))
+
+    # 6. open the widget now
+    if w.ask(ui.t("setup.open.q"), ui.t("setup.open.explain"), default=not yes):
+        if open_widget(ui):
+            done.append(ui.t("setup.done.open", url=f"http://127.0.0.1:{DEFAULT_PORT}/"))
+
+    # summary
+    cfg = load_config()
+    cfg["setup_done"] = True
+    cfg["lang"] = ui.lang
+    save_config(cfg)
+    print()
+    tui.heading(ui.t("setup.summary"))
+    for line in done or [ui.t("setup.done.nothing")]:
+        print("  ✓ " + line)
+    print("  " + ui.t("setup.data", path=cu.display_path(DATA)))
+    print("  " + ui.t("setup.undo"))
+    print("  " + ui.t("setup.again"))
+    if not yes:
+        print()
+        tui.pause(ui.t("setup.continue"))
+    return ui
+
+
 # --------------------------------------------------------------------------- command line
 
 def build_parser() -> argparse.ArgumentParser:
@@ -407,6 +693,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="run.py",
         description="Claude Usage Tracker launcher. Without a command, an interactive menu opens.")
     p.add_argument("--lang", choices=LANGS, help="menu language (remembered for next time)")
+    p.add_argument("--setup", action="store_true", help="run the quick setup (it also runs by itself the first time)")
+    p.add_argument("--yes", action="store_true", help="with --setup: take every recommended answer without asking")
     sub = p.add_subparsers(dest="cmd", metavar="command")
     sub.add_parser("read", help="take a reading now")
     sub.add_parser("open", help="start the widget server (if needed) and open the widget in the browser")
@@ -417,6 +705,12 @@ def build_parser() -> argparse.ArgumentParser:
     inst = sub.add_parser("install", help="set up automatic readings in the background (adaptive timing, 30 s to 10 min)")
     inst.add_argument("--with-server", action="store_true", help="also start the widget server at login")
     sub.add_parser("uninstall", help="remove automatic readings (your data is kept)")
+    hb = sub.add_parser("hub", help="send every reading to a hub (an always-on machine running the server)")
+    hb.add_argument("--url", help="the hub's address, e.g. http://nas.tailnet.ts.net:8765")
+    hb.add_argument("--token", help="the hub's API token (its data/api_token file)")
+    hb.add_argument("--off", action="store_true", help="stop sending readings to the hub")
+    sc = sub.add_parser("shortcut", help="create a desktop / menu shortcut that opens the widget directly")
+    sc.add_argument("--remove", action="store_true", help="remove that shortcut")
     return p
 
 
@@ -434,8 +728,15 @@ def main(argv: list[str] | None = None) -> int:
         save_config(cfg)
 
     try:
+        if args.setup or (args.cmd is None and not cfg.get("setup_done")):
+            # first run (or --setup): the quick setup, then the menu (not after --yes: that is for scripts)
+            ui = setup_wizard(Ui(lang or "en"), yes=args.yes, ask_language=not (args.lang or args.yes))
+            if args.yes or args.cmd is not None:
+                return 0
+            main_menu(ui)
+            return 0
         if args.cmd is None:
-            if lang not in LANGS:                          # first run: ask once
+            if lang not in LANGS:                          # set up by an older version without a language: ask once
                 lang = pick_language() or "en"
                 cfg["lang"] = lang
                 save_config(cfg)
@@ -458,6 +759,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if install_task(ui, args.with_server) else 1
         if args.cmd == "uninstall":
             return 0 if remove_task(ui) else 1
+        if args.cmd == "hub":
+            return 0 if hub_setup(ui, args.url, args.token, args.off) else 1
+        if args.cmd == "shortcut":
+            return 0 if make_shortcut(ui, remove=args.remove) else 1
     except KeyboardInterrupt:
         print()
         return 130

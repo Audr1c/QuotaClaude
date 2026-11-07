@@ -19,12 +19,14 @@ it may change). The OAuth token is read from ~/.claude/.credentials.json
 """
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import os
 import re
 import sys
 import time
+from functools import lru_cache
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -48,6 +50,7 @@ CSV_FIELDS = [
 # Replaced automatically by an estimate once the history allows it.
 DEFAULT_RATIO = 10.0
 MIN_5H_POINTS_FOR_RATIO = 20.0   # cumulated 5h % observed before trusting the estimate
+SCHEMA = 1                       # version of latest.json / the /api/v1 answers: changes on any incompatible change
 HISTORY_DAYS = 8                 # history embedded in latest.js for charts
 SAME_WINDOW_TOLERANCE_S = 300    # two resets_at less than 5 minutes apart = same window
 MAX_LOG_BYTES = 200_000
@@ -71,13 +74,10 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def parse_dt(value) -> datetime | None:
-    """ISO 8601 (with or without fraction / Z) or epoch seconds -> UTC datetime."""
-    if value in (None, ""):
-        return None
-    if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(float(value), tz=timezone.utc)
-    s = str(value).strip().replace("Z", "+00:00")
+@lru_cache(maxsize=262144)
+def _parse_str(value: str) -> datetime | None:
+    """Parse one timestamp string. Cached: datetimes are immutable and the history repeats the same strings."""
+    s = value.strip().replace("Z", "+00:00")
     s = re.sub(r"(\.\d+)(?=[+-]\d\d:\d\d$|$)", "", s)  # Python < 3.11 rejects some fractions
     try:
         d = datetime.fromisoformat(s)
@@ -86,6 +86,15 @@ def parse_dt(value) -> datetime | None:
     if d.tzinfo is None:
         d = d.replace(tzinfo=timezone.utc)
     return d.astimezone(timezone.utc)
+
+
+def parse_dt(value) -> datetime | None:
+    """ISO 8601 (with or without fraction / Z) or epoch seconds -> UTC datetime."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), tz=timezone.utc)
+    return _parse_str(str(value))
 
 
 def iso(d: datetime | None) -> str:
@@ -250,17 +259,35 @@ def _same(a: datetime | None, b: datetime | None) -> bool:
     return a is not None and b is not None and abs((a - b).total_seconds()) <= SAME_WINDOW_TOLERANCE_S
 
 
+def _new_window_start(a: dict, b: dict) -> float | None:
+    """5h % of reading b when b opens a NEW 5-hour window that began after reading a (usage counted from 0), else None.
+    If the window began before a, the usage between its start and a is unknown, so nothing is counted."""
+    b5 = num(b.get("five_hour_pct"))
+    rb, ta, tb = parse_dt(b.get("five_hour_resets_at")), parse_dt(a.get("timestamp")), parse_dt(b.get("timestamp"))
+    if b5 is None or b5 <= 0 or rb is None or ta is None or tb is None:
+        return None
+    if _same(parse_dt(a.get("five_hour_resets_at")), rb):
+        return None
+    start = rb - timedelta(hours=5)
+    return b5 if ta <= start <= tb else None
+
+
 def _same_window_deltas(rows: list[dict]):
-    """(timestamp, d5, d7) for each pair of consecutive readings inside the SAME windows with d5 > 0 and d7 >= 0."""
+    """(timestamp, d5, d7) for each pair of consecutive readings with d5 > 0 and d7 >= 0, inside the SAME weekly window.
+    The 5h part is either the increase inside the same 5-hour window or, when b opens a new window that began after a,
+    b's own 5h % (counted from 0, see _new_window_start)."""
     for a, b in zip(rows, rows[1:]):
         a5, b5 = num(a.get("five_hour_pct")), num(b.get("five_hour_pct"))
         a7, b7 = num(a.get("seven_day_pct")), num(b.get("seven_day_pct"))
-        if None in (a5, b5, a7, b7):
+        if None in (a7, b7) or not _same(parse_dt(a.get("seven_day_resets_at")), parse_dt(b.get("seven_day_resets_at"))):
             continue
-        if not (_same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at")))
-                and _same(parse_dt(a.get("seven_day_resets_at")), parse_dt(b.get("seven_day_resets_at")))):
-            continue
-        d5, d7 = b5 - a5, b7 - a7
+        if None not in (a5, b5) and _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+            d5 = b5 - a5
+        else:
+            d5 = _new_window_start(a, b)
+            if d5 is None:
+                continue
+        d7 = b7 - a7
         if d5 > 0 and d7 >= 0:
             yield b["timestamp"], d5, d7
 
@@ -294,16 +321,18 @@ def tokens_state(data_dir: Path, rows: list[dict], now: datetime):
 
 def hourly_5h(rows: list[dict]) -> list:
     """5-hour usage consumed per clock hour (UTC), whole history: [[hour_iso, 5h-%]], hours without usage left out.
-    Sum of the increases between consecutive readings of the same 5-hour window, credited to the later reading's hour."""
+    Sum of the increases between consecutive readings of the same 5-hour window (plus the first reading of a new window), credited to the later reading's hour."""
     out: dict = {}
     for a, b in zip(rows, rows[1:]):
         a5, b5 = num(a.get("five_hour_pct")), num(b.get("five_hour_pct"))
-        if None in (a5, b5) or b5 <= a5:
-            continue
-        if not _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+        if None not in (a5, b5) and _same(parse_dt(a.get("five_hour_resets_at")), parse_dt(b.get("five_hour_resets_at"))):
+            d5 = b5 - a5
+        else:
+            d5 = _new_window_start(a, b)        # first reading of a new window: its % counts from 0
+        if d5 is None or d5 <= 0:
             continue
         h = parse_dt(b["timestamp"]).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
-        out[h] = out.get(h, 0.0) + (b5 - a5)
+        out[h] = out.get(h, 0.0) + d5
     return [[h, round(v, 1)] for h, v in sorted(out.items())]
 
 
@@ -351,6 +380,11 @@ def estimate_ratio(rows: list[dict]) -> tuple[float | None, float]:
 
 
 def _atomic_write(path: Path, text: str) -> None:
+    try:
+        if path.read_text(encoding="utf-8") == text:
+            return          # unchanged: no write (matters on a synced folder)
+    except OSError:
+        pass
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")      # own name: the poller and the server never share a temp file
     tmp.write_text(text, encoding="utf-8")
     for attempt in range(20):
@@ -548,6 +582,7 @@ def write_outputs(data_dir: Path, rows: list[dict], now: datetime, error: str | 
             continue
         history.append(h)
     state = {
+        "schema": SCHEMA,
         "generated_at": iso(now),
         "fetched_at": last["timestamp"] if last else None,
         "five_hour": {"pct": num(last.get("five_hour_pct")), "resets_at": last.get("five_hour_resets_at") or None} if last else None,
@@ -589,13 +624,89 @@ def log(data_dir: Path, msg: str) -> None:
 
 # --------------------------------------------------------------------------- entry point
 
+READING_LOCK_NAME = "reading.lock"
+READING_LOCK_TIMEOUT_S = 30.0
+
+
+def _try_lock(fh) -> bool:
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _unlock(fh) -> None:
+    try:
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+
+
+@contextlib.contextmanager
+def reading_lock(data_dir: Path, timeout: float):
+    """Cross-process lock (data/reading.lock) so that two readings never run at the same time.
+
+    Waits up to `timeout` seconds; yields True when the lock is held, False on timeout.
+    """
+    data_dir.mkdir(parents=True, exist_ok=True)
+    fh = open(data_dir / READING_LOCK_NAME, "a+")
+    held = False
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            held = _try_lock(fh)
+            if held or time.monotonic() >= deadline:
+                break
+            time.sleep(0.1)
+        yield held
+    finally:
+        if held:
+            _unlock(fh)
+        fh.close()
+
+
 def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | None = None):
+    """One complete reading, serialised across processes by `reading_lock`.
+
+    If another reading holds the lock for more than READING_LOCK_TIMEOUT_S, returns the saved state
+    with error code "busy" instead.
+    """
+    with reading_lock(data_dir, READING_LOCK_TIMEOUT_S) as held:
+        if not held:
+            try:
+                state = json.loads((data_dir / "latest.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                state = {}
+            state["error_code"] = "busy"
+            return None, "Another reading is still in progress.", state
+        return _run_locked(data_dir, payload, now)
+
+
+def _run_locked(data_dir: Path, payload: dict | None, now: datetime | None):
     """One complete reading. `payload` lets tests inject an API response.
 
     Returns (row or None, error message or None, state dict).
     """
     now = now or now_utc()
     data_dir.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        try:
+            os.chmod(data_dir, 0o700)                         # keep other users of a shared machine out
+        except OSError:
+            pass
     row, error, error_code, breakdown, failure = None, None, None, None, None
     try:
         if payload is None:
@@ -631,6 +742,13 @@ def run(data_dir: Path = DATA_DIR, payload: dict | None = None, now: datetime | 
         log(data_dir, f"ERROR [{error_code}]{extra} (failure #{diagnostics['consecutive']} in a row) " + error)
     else:
         log(data_dir, f"OK 5h={row['five_hour_pct']}% 7d={row['seven_day_pct']}%")
+        try:                                     # HUB-1: also send it to the hub, if this PC is set up for one
+            import hub
+            failed = hub.push(data_dir, row)
+            if failed:
+                log(data_dir, f"WARNING hub push failed: {failed} (the reading is saved here)")
+        except Exception as e:
+            log(data_dir, f"WARNING hub push: {type(e).__name__}")
     return row, error, state
 
 
