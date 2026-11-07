@@ -314,7 +314,7 @@ window.CU = window.CU || {};
     const days = ratioDays(m), last = days.length ? days[days.length - 1] : null;
     const figs = [`<b>${CU.fmt.pct(m.ratio, 1)}</b>`];
     if (L >= 3 && last && last.ratio != null) figs.push(t("mini.ratio.day", { n: CU.fmt.pct(last.ratio, 1) }));
-    let body = "";
+    let body = L < 2 ? `<div class="share"><span style="flex:0 0 ${Math.min(100, Math.max(m.ratio, 0)).toFixed(1)}%;background:var(--clay)"></span></div>` : "";   // level 1: a plain bar
     if (L >= 4) {
       const pts = days.filter(d => d.cum != null).slice(-30);
       if (pts.length >= 2) {
@@ -335,7 +335,7 @@ window.CU = window.CU || {};
     const tip = (x, i) => `${hr(i)} h · ${CU.fmt.pct(x, 1)}`;
     const body = L >= 4
       ? `<div class="hbars">${v.map((x, i) => `<span style="height:${Math.max(4, 100 * x / mxv).toFixed(0)}%" class="${i === pk ? "pk" : ""}" title="${tip(x, i)}"></span>`).join("")}</div>`
-      : `<div class="heat">${v.map((x, i) => `<span style="opacity:${(x > 0 ? 0.2 + 0.8 * x / mxv : 0.08).toFixed(2)}" class="${L >= 3 && i === pk ? "pk" : ""}" title="${tip(x, i)}"></span>`).join("")}</div>`;
+      : `<div class="heat">${v.map((x, i) => `<span style="${x > 0 ? "opacity:" + (0.25 + 0.75 * x / mxv).toFixed(2) : "background:var(--track)"}" class="${L >= 3 && i === pk ? "pk" : ""}" title="${tip(x, i)}"></span>`).join("")}</div>`;
     const figs = [`<b>${CU.fmt.pct(total, 0)}</b> ${t("mini.hourly.24h")}`];
     if (L >= 3) figs.push(t("mini.peak", { h: hr(pk) + " h" }));
     return { key: "hourly", title: t("mini.hourly"), body, figs: figs.join(" · ") };
