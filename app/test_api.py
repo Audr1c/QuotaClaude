@@ -203,11 +203,14 @@ class ApiTests(unittest.TestCase):
         stored = json.loads((self.data / "config.json").read_text(encoding="utf-8"))
         self.assertEqual((stored["lang"], stored["setup_done"]), ("fr", True))      # the launcher's keys are kept
         self.assertEqual(self.request("GET", "/api/v1/model")[1]["hours"], 6)      # the model follows the settings
-        for bad in ({"level": 12}, {"level": "7"}, {"hours": True}, {"css": "body{}"}, {"theme": {"preset": "x"}},
+        for bad in ({"level": 12}, {"level": 8}, {"level": "7"}, {"panels": {"x": True}}, {"panels": {"tokens": "no"}}, {"hours": True}, {"css": "body{}"}, {"theme": {"preset": "x"}},
                     {"theme": {"light": {"five": "red"}}}, {"theme": {"light": {"five": "#12345g"}}}, [], {}):
             self.assertEqual(self.post_config(bad)[0], 400, bad)
         st, cfg = self.post_config({"theme": {"preset": "mono", "light": {"five": "#AABBCC"}}})
         self.assertEqual(cfg["widget"]["theme"]["light"]["five"], "#aabbcc")
+        st, cfg = self.post_config({"panels": {"tokens": False}})
+        self.assertEqual((st, cfg["widget"]["panels"]["tokens"], cfg["widget"]["panels"]["gauges"]), (200, False, True))
+        self.post_config({"panels": {"tokens": True}})
         self.post_config({"level": "auto", "work_hours": False, "hours": 8, "theme": {"preset": "claude"}})
 
     def test_a_hand_edited_bad_value_falls_back_to_the_default(self):

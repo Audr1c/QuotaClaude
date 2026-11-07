@@ -5,8 +5,9 @@
    Each chart has a range: preset buttons, and (charts 1 and 2) a small overview below it, like a market chart:
    drag the window to move it, drag its edges to zoom, click outside to jump there. The range is kept in
    localStorage. While a drag is going on, CU.dragging is true and the page does not re-render.
-   Compactness level (UI-5): below 8 a chart is a small always-open card (no range buttons, no overview, lighter
-   axes); 8 = the full chart; the tokens panel only shows its summary at 7, its tables from 8 and the per-day one at 9. */
+   Compactness level: below 6 a chart is a small always-open card (no range buttons, no overview, lighter axes);
+   6 = the full chart, and the full tokens panel (summary, tables, per-day). Levels 2 to 4 do not draw these charts:
+   CU.minis (end of this file) gives each panel a one-line version instead. */
 window.CU = window.CU || {};
 
 (function (CU) {
@@ -64,8 +65,8 @@ window.CU = window.CU || {};
     }
     return { bh, bars: out };
   }
-  function hourlyPlot(m, a, b, s, lvl = 9) {
-    const lite = lvl < 8;
+  function hourlyPlot(m, a, b, s, lvl = 6) {
+    const lite = lvl < 6;
     const { bh, bars } = hourlyBuckets(m, a, b), rate = bh <= 6 ? m.five.paceRate * bh : null;
     const peak = Math.max(...bars.map(d => d.v), rate || 0, 1), step = niceStep(peak * 1.1), max = Math.ceil(peak * 1.1 / step) * step;
     const y = v => HT - B - (HT - B - T) * v / max, bw = (W - L - R) / bars.length, stride = Math.max(1, Math.ceil(bars.length / (lite ? 5 : 9)));
@@ -92,8 +93,8 @@ window.CU = window.CU || {};
   /* ---------- 2. ratio over time ---------- */
   const ratioDays = m => m.ratioDaily.map(d => Object.assign({ ms: Date.parse(d.day + "T00:00:00Z") + DAY / 2 }, d));
   const ratioDomain = m => { const d = ratioDays(m); return [d[0].ms - DAY / 2, d[d.length - 1].ms + DAY / 2]; };
-  function ratioPlot(m, a, b, s, lvl = 9) {
-    const lite = lvl < 8;
+  function ratioPlot(m, a, b, s, lvl = 6) {
+    const lite = lvl < 6;
     const days = ratioDays(m).filter(d => d.ms >= a && d.ms <= b);
     const vals = days.flatMap(d => [d.ratio, d.cum]).filter(v => v != null).concat(m.ratio);
     const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1), step = niceStep(hi - lo);
@@ -137,7 +138,7 @@ window.CU = window.CU || {};
   const stack = (types, key, tot, label) => `<div class="share">${types.map(x => x[key] > 0 ?
     `<span style="flex-grow:${x[key]};background:${x.color}" title="${t("chart.tokens.t." + x.id)} · ${pc(x[key], tot)} ${label}"></span>` : "").join("")}</div>`;
 
-  function tokensPlot(m, a, b, span, lvl = 9) {
+  function tokensPlot(m, a, b, span, lvl = 6) {
     const cut = span ? new Date(Date.now() - (span / DAY - 1) * DAY).toISOString().slice(0, 10) : "";
     const days = m.tokens.days.filter(d => d.day >= cut).reverse();
     const tot = { input: 0, output: 0, cache_read: 0, cache_write: 0, cache_write_1h: 0 };
@@ -161,13 +162,12 @@ window.CU = window.CU || {};
           <div><b>${pc(tot.cache_read, all)}</b><span>${t("chart.tokens.s.cached", { n: k(tot.cache_read) })}</span></div>
           <div><b>${saving == null ? "—" : "−" + CU.fmt.pct(saving, 0)}</b><span>${t("chart.tokens.s.saving")}</span></div>
         </div>`;
-    if (lvl < 8) return { svg: statsHtml };
+    if (lvl < 6) return { svg: statsHtml };
     const tables = `
         <h3 class="sub">${t("chart.tokens.h.tokens")}</h3>${stack(types, "n", all, t("chart.tokens.oftokens"))}
         <h3 class="sub">${t("chart.tokens.h.cost")}</h3>${stack(types, "cost", cost, t("chart.tokens.ofcost"))}
         <table class="eqs tokens types"><tr><th></th><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.pctt")}</td><td>${t("chart.tokens.c.price")}</td><td>${t("chart.tokens.c.pctc")}</td></tr>${rows}</table>
         <p class="note" data-note="tokens">${t("chart.tokens.hitnote")}</p>`;
-    if (lvl < 9) return { svg: statsHtml + tables };
     return { svg: statsHtml + tables + `
         <h3 class="sub">${t("chart.tokens.byday")}</h3>
         <div class="hscroll"><table class="eqs tokens"><tr><th></th><td></td><td>${t("chart.tokens.c.tokens")}</td><td>${t("chart.tokens.c.cache")}</td><td>${t("chart.tokens.c.cost")}</td><td>${t("chart.tokens.c.week")}</td><td>${t("chart.tokens.c.costpct")}</td></tr>${drows}</table></div>` };
@@ -187,7 +187,7 @@ window.CU = window.CU || {};
     ratio: {
       key: "ratio", span: 0, minSpan: 3 * DAY, presets: [P("7d", 7 * DAY), P("14d", 14 * DAY), P("all", 0)],
       ready: m => m.ratioDaily.length >= 2, domain: ratioDomain, mini: ratioMini, plot: ratioPlot,
-      label: (r, a, b) => { const yr = rangeYear(a, b); return `${dm(a, yr)} → ${dm(b, yr)}`; },
+      label: (r, a, b, m) => { const yr = rangeYear(a, b); return `${dm(a, yr)} → ${dm(b, yr)} · ${t("chart.ratio.now", { n: CU.fmt.pct(m.ratio, 1) })}`; },   // the header figure is hidden once the panel is open
       hint: m => t("chart.ratio.now", { n: CU.fmt.pct(m.ratio, 1) }), note: () => t("chart.ratio.note"),
       legend: () => `<ul class="legend chart-legend"><li><span class="dot" style="color:var(--blue)"></span><span class="lbl">${t("chart.ratio.day")}</span></li>`
         + `<li><span class="dot" style="color:var(--clay)"></span><span class="lbl">${t("chart.ratio.cum")}</span></li></ul>`,
@@ -204,9 +204,9 @@ window.CU = window.CU || {};
   };
 
   /* what a chart shows for the current range */
-  function parts(def, m, lvl = 9) {
+  function parts(def, m, lvl = 6) {
     const s = state(def), [lo, hi] = def.domain(m), [a, b] = win(s, lo, hi, def.minSpan), r = def.plot(m, a, b, s, lvl);
-    return { s, lo, hi, a, b, r, label: def.label(r, a, b) };
+    return { s, lo, hi, a, b, r, label: def.label(r, a, b, m) };
   }
   const pressed = (def, p, span, lo, hi, a, b) => def.key === "tokens" ? p === span : (p ? Math.abs((b - a) - Math.min(p, hi - lo)) < 1000 : b - a >= hi - lo - 1000);
 
@@ -233,7 +233,7 @@ window.CU = window.CU || {};
   const qbtn = key => `<button type="button" class="qbtn" data-note-for="${key}" aria-label="${t("notes.one")}" title="${t("notes.one")}">?</button>`;
   function card(def, m, lvl) {
     const p = parts(def, m, lvl);
-    if (lvl < 8) {                                                      // small version: always open, no range controls
+    if (lvl < 6) {                                                      // small version: always open, no range controls
       const plot = def.key === "tokens" ? `<div class="plot">${p.r.svg}</div>` : `<svg class="plot" viewBox="0 0 ${W} ${HT}" role="img" aria-label="${t(def.title)}">${p.r.svg}</svg>`;
       return `
       <section class="card chart lite" data-key="${def.key}" data-level="${lvl}">
@@ -267,7 +267,7 @@ window.CU = window.CU || {};
   function refresh(el) {
     const def = DEFS[el.dataset.key], m = CU.lastModel;
     if (!def || !m) return;
-    const p = parts(def, m, +el.dataset.level || 9), plot = el.querySelector(".plot");
+    const p = parts(def, m, +el.dataset.level || 6), plot = el.querySelector(".plot");
     plot.innerHTML = p.r.svg;
     const rl = el.querySelector(".rlabel");
     if (rl && rl.firstChild && rl.firstChild.nodeType === 3) rl.firstChild.textContent = p.label + " ";
@@ -281,7 +281,7 @@ window.CU = window.CU || {};
     svg.setAttribute("aria-valuetext", p.label);
   }
 
-  CU.charts = function (m, keys, lvl = 9) {                             // keys: which charts (default: all); lvl: compactness level
+  CU.charts = function (m, keys, lvl = 6) {                             // keys: which charts (default: all); lvl: compactness level
     CU.lastModel = m;
     return Object.values(DEFS).filter(d => (!keys || keys.includes(d.key)) && d.ready(m)).map(d => card(d, m, lvl)).join("");
   };
@@ -290,8 +290,77 @@ window.CU = window.CU || {};
     const m = CU.lastModel;
     root.querySelectorAll(".chart").forEach(el => {
       const def = DEFS[el.dataset.key], svg = el.querySelector("svg.mini");
-      if (def && svg && m) { const p = parts(def, m, +el.dataset.level || 9); place(svg, p.lo, p.hi, p.a, p.b); aria(svg, p); }
+      if (def && svg && m) { const p = parts(def, m, +el.dataset.level || 6); place(svg, p.lo, p.hi, p.a, p.b); aria(svg, p); }
     });
+  };
+
+  /* ---------- levels 2 to 4: every panel as a few lines ----------
+     One card, one row per panel. Level 2 = the essentials of each panel; 3 adds a second figure; 4 a small drawing. */
+  const seg = (v, c, tip) => v > 0 ? `<span style="flex-grow:${v};background:${c}" title="${tip}"></span>` : "";
+  const PALETTE = ["var(--clay)", "var(--blue)", "var(--sage)", "var(--violet)"];
+  function miniTokens(m, L) {
+    const w = m.tokens && m.tokens.week;
+    if (!w) return null;
+    const types = tokenTypes(w), all = sum(types, x => x.n), cost = sum(types, x => x.cost);
+    if (!(all > 0)) return null;
+    const bar = `<div class="share">${types.map(x => seg(x.n, x.color, `${t("chart.tokens.t." + x.id)} · ${pc(x.n, all)}`)).join("")}</div>`;
+    const noCache = (w.input + w.cache_read + w.cache_write) * PRICE.input + w.output * PRICE.output;
+    const parts_ = [`<b>${k(all)}</b>`];
+    if (L >= 3) parts_.push(t("mini.cached", { n: pc(w.cache_read, all) }));
+    if (L >= 4 && noCache > 0) parts_.push(t("mini.saving", { n: CU.fmt.pct(100 * (1 - cost / noCache), 0) }));
+    return { key: "tokens", title: t("mini.tokens"), body: bar, figs: parts_.join(" · ") };
+  }
+  function miniRatio(m, L) {
+    const days = ratioDays(m), last = days.length ? days[days.length - 1] : null;
+    const figs = [`<b>${CU.fmt.pct(m.ratio, 1)}</b>`];
+    if (L >= 3 && last && last.ratio != null) figs.push(t("mini.ratio.day", { n: CU.fmt.pct(last.ratio, 1) }));
+    let body = L < 2 ? `<div class="share"><span style="flex:0 0 ${Math.min(100, Math.max(m.ratio, 0)).toFixed(1)}%;background:var(--clay)"></span></div>` : "";   // level 1: a plain bar
+    if (L >= 4) {
+      const pts = days.filter(d => d.cum != null).slice(-30);
+      if (pts.length >= 2) {
+        const vs = pts.map(d => d.cum), mn = Math.min(...vs), mxv = Math.max(...vs, mn + 0.5);
+        const path = pts.map((d, i) => (i ? "L" : "M") + f(i / (pts.length - 1) * 100) + " " + f(2 + 16 * (1 - (d.cum - mn) / (mxv - mn)))).join(" ");
+        body = `<svg class="spark" viewBox="0 0 100 20" preserveAspectRatio="none" role="img" aria-label="${t("mini.ratio")}"><path d="${path}" fill="none" stroke="var(--clay)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+      }
+    }
+    return { key: "ratio", title: t("mini.ratio"), body, figs: figs.join(" · ") };
+  }
+  function miniHourly(m, L) {
+    if (!m.hourly5 || !m.hourly5.length) return null;
+    const end = Math.floor(Date.now() / H) * H, v = new Array(24).fill(0);
+    for (const [iso, x] of m.hourly5) { const i = 23 - Math.floor((end - Date.parse(iso)) / H); if (i >= 0 && i < 24) v[i] += x; }
+    const mxv = Math.max(...v, 0), total = sum(v, x => x), pk = v.indexOf(mxv);
+    if (!(total > 0)) return null;
+    const hr = i => new Date(end - (23 - i) * H).getHours();
+    const tip = (x, i) => `${hr(i)} h · ${CU.fmt.pct(x, 1)}`;
+    const body = L >= 4
+      ? `<div class="hbars">${v.map((x, i) => `<span style="height:${Math.max(4, 100 * x / mxv).toFixed(0)}%" class="${i === pk ? "pk" : ""}" title="${tip(x, i)}"></span>`).join("")}</div>`
+      : `<div class="heat">${v.map((x, i) => `<span style="${x > 0 ? "opacity:" + (0.25 + 0.75 * x / mxv).toFixed(2) : "background:var(--track)"}" class="${L >= 3 && i === pk ? "pk" : ""}" title="${tip(x, i)}"></span>`).join("")}</div>`;
+    const figs = [`<b>${CU.fmt.pct(total, 0)}</b> ${t("mini.hourly.24h")}`];
+    if (L >= 3) figs.push(t("mini.peak", { h: hr(pk) + " h" }));
+    return { key: "hourly", title: t("mini.hourly"), body, figs: figs.join(" · ") };
+  }
+  function miniBreakdown(m, L) {
+    const rows = (m.breakdown || []).filter(r => r.share > 0).sort((a, b) => b.share - a.share);
+    if (!rows.length) return null;
+    const bar = `<div class="share">${rows.map((r, i) => seg(r.share, PALETTE[i % PALETTE.length], `${esc(r.name)} · ${CU.fmt.pct(r.share)}`)).join("")}</div>`;
+    const figs = L >= 3 ? rows.slice(0, L >= 4 ? 3 : 1).map(r => `${esc(r.name)} <b>${CU.fmt.pct(r.share)}</b>`).join(" · ") : t("breakdown.count", { n: rows.length });
+    return { key: "breakdown", title: t("mini.breakdown"), body: bar, figs: rows.length === 1 && L < 3 ? t("breakdown.count.one") : figs };
+  }
+  const esc = x => String(x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  /* panels: { tokens, ratio, hourly, breakdown } booleans (settings); the card is empty -> "" */
+  CU.minis = function (m, L, panels = {}) {
+    CU.lastModel = m;
+    const on = key => panels[key] !== false;
+    const rows = [on("tokens") && miniTokens(m, L), on("ratio") && miniRatio(m, L), on("hourly") && miniHourly(m, L), on("breakdown") && miniBreakdown(m, L)].filter(Boolean);
+    if (L < 2) {                                                           // level 1: the bars only, no text (still a tooltip on each cell)
+      const bars = rows.filter(r => r.body);
+      return bars.length ? `<section class="card minis lvl1" role="group" aria-label="${t("mini.aria")}">${bars.map(r => `<div class="mrow" data-mini="${r.key}" title="${r.title} · ${r.figs.replace(/<[^>]+>/g, "")}"><div class="mbody">${r.body}</div></div>`).join("")}</section>` : "";
+    }
+    if (!rows.length) return "";
+    return `<section class="card minis lvl${L}" role="group" aria-label="${t("mini.aria")}">${rows.map(r => `
+        <div class="mrow" data-mini="${r.key}"><span class="mlabel">${r.title}</span>${r.body ? `<div class="mbody">${r.body}</div>` : ""}<span class="mfigs">${r.figs}</span></div>`).join("")}
+      </section>`;
   };
 
   /* The page is rebuilt every 10 s: keep the keyboard focus on the same control (mini view, range button, title). */

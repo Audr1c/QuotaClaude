@@ -16,17 +16,15 @@
 <body>
   <div class="wrap">
     <header>
+      <div class="density">
+        <label for="level" data-i18n="level.label">Detail</label>
+        <input type="range" id="level" min="1" max="7" step="1" value="6" data-i18n-aria="level.aria">
+        <output id="level-value" for="level">6/7</output>
+        <button type="button" class="btn small" id="level-auto" aria-pressed="true" data-i18n="level.auto" data-i18n-title="level.auto.title">Auto</button>
+      </div>
       <h1><span data-i18n="app.title">Claude usage</span><span class="accent">.</span></h1>
       <div class="tools">
         <span class="meta" id="meta">—</span>
-        <div class="density">
-          <label for="level" data-i18n="level.label">Detail</label>
-          <input type="range" id="level" min="1" max="9" step="1" value="9" data-i18n-aria="level.aria">
-          <output id="level-value" for="level">9/9</output>
-          <button type="button" class="btn small" id="level-auto" aria-pressed="true" data-i18n="level.auto" data-i18n-title="level.auto.title">Auto</button>
-          <span class="sep" aria-hidden="true"></span>
-          <button type="button" class="btn toggle" id="notes" aria-pressed="true" data-i18n-title="notes.title"><span data-i18n="notes.label">Explanations</span></button>
-        </div>
         <div class="seg lang" role="group" data-i18n-aria="lang.label">
           <button type="button" data-lang="en" aria-pressed="true">EN</button>
           <button type="button" data-lang="fr" aria-pressed="false">FR</button>
@@ -35,6 +33,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span data-i18n="refresh">Refresh</span>
         </button>
+        <button type="button" class="btn" id="panels-open" aria-haspopup="dialog" data-i18n="panels.title" data-i18n-title="panels.hint">Panels</button>
         <button type="button" class="btn" id="theme-open" aria-haspopup="dialog" data-i18n="theme.title" data-i18n-title="theme.hint">Theme</button>
         <button type="button" class="btn qbtn-big" id="how-open" aria-haspopup="dialog" data-i18n-title="formulas.title" data-i18n-aria="formulas.title">?</button>
       </div>
@@ -58,6 +57,14 @@
         </div>
       </aside>
     </div>
+    <dialog id="panels-dlg" class="how" aria-labelledby="panels-title">
+      <div class="how-head">
+        <h2 id="panels-title" data-i18n="panels.title">Panels</h2>
+        <span class="hint" data-i18n="panels.hint">which panels to show, whatever the detail level</span>
+        <button type="button" class="btn" id="panels-close" data-i18n-aria="close" data-i18n-title="close">✕</button>
+      </div>
+      <div id="panels-body" class="plist"></div>
+    </dialog>
     <dialog id="theme-dlg" class="how" aria-labelledby="theme-title">
       <div class="how-head">
         <h2 id="theme-title" data-i18n="theme.title">Theme</h2>
