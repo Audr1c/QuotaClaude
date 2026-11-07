@@ -187,7 +187,7 @@ window.CU = window.CU || {};
     ratio: {
       key: "ratio", span: 0, minSpan: 3 * DAY, presets: [P("7d", 7 * DAY), P("14d", 14 * DAY), P("all", 0)],
       ready: m => m.ratioDaily.length >= 2, domain: ratioDomain, mini: ratioMini, plot: ratioPlot,
-      label: (r, a, b) => { const yr = rangeYear(a, b); return `${dm(a, yr)} → ${dm(b, yr)}`; },
+      label: (r, a, b, m) => { const yr = rangeYear(a, b); return `${dm(a, yr)} → ${dm(b, yr)} · ${t("chart.ratio.now", { n: CU.fmt.pct(m.ratio, 1) })}`; },   // the header figure is hidden once the panel is open
       hint: m => t("chart.ratio.now", { n: CU.fmt.pct(m.ratio, 1) }), note: () => t("chart.ratio.note"),
       legend: () => `<ul class="legend chart-legend"><li><span class="dot" style="color:var(--blue)"></span><span class="lbl">${t("chart.ratio.day")}</span></li>`
         + `<li><span class="dot" style="color:var(--clay)"></span><span class="lbl">${t("chart.ratio.cum")}</span></li></ul>`,
@@ -206,7 +206,7 @@ window.CU = window.CU || {};
   /* what a chart shows for the current range */
   function parts(def, m, lvl = 6) {
     const s = state(def), [lo, hi] = def.domain(m), [a, b] = win(s, lo, hi, def.minSpan), r = def.plot(m, a, b, s, lvl);
-    return { s, lo, hi, a, b, r, label: def.label(r, a, b) };
+    return { s, lo, hi, a, b, r, label: def.label(r, a, b, m) };
   }
   const pressed = (def, p, span, lo, hi, a, b) => def.key === "tokens" ? p === span : (p ? Math.abs((b - a) - Math.min(p, hi - lo)) < 1000 : b - a >= hi - lo - 1000);
 
