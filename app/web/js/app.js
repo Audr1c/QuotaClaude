@@ -84,8 +84,9 @@
   // Everything render() depends on besides the clock: if it is unchanged, the periodic tick can skip the rebuild.
   const signature = () => {
     const D = window.CLAUDE_USAGE || {};
-    return JSON.stringify([D.generated_at, D.fetched_at, D.error, pollerState && pollerState.next_at, level(), workOn, hours, CU.lang, panels]);
+    return JSON.stringify([D.generated_at, D.fetched_at, D.error, pollerState && pollerState.next_at, level(), workOn, hours, CU.lang, panels, colsNow()]);
   };
+  const colsNow = () => (innerWidth >= 1750 ? 3 : innerWidth >= 1300 ? 2 : 1);      // same breakpoints as style.css
   let lastSig = null, lastRender = 0;
   function render() {
     if (CU.dragging) return;                 // a chart range is being dragged: do not rebuild the page under the pointer
@@ -100,7 +101,7 @@
       return;
     }
     const restoreFocus = CU.captureFocus($("app"));          // the page is rebuilt below: keep the keyboard focus where it was
-    $("app").innerHTML = CU.compose(m, level(), { breakdownOpen, chartsOpen, panels });
+    $("app").innerHTML = CU.compose(m, level(), { breakdownOpen, chartsOpen, panels, cols: colsNow() });
     applyNotes();
     CU.fitBars($("app"));
     CU.chartsAfterRender($("app"));
@@ -276,7 +277,7 @@
   });
 
   let resizeTimer = null;                          // day names in the breakdown bars depend on their width
-  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => CU.fitBars($("app")), 100); });
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (signature() !== lastSig) render(); else CU.fitBars($("app")); }, 100); });
 
   /* ---------- installable app (ACC-1): a service worker, only when served (127.0.0.1 counts as a secure origin) ---------- */
   if (SERVED && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { /* not essential */ });
